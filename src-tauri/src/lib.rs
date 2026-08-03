@@ -216,6 +216,7 @@ pub fn run() {
             commands::save_provider_key,
             commands::clear_provider_key,
             commands::bar_set_size,
+            commands::window_fit,
             commands::bar_dropped,
             commands::set_click_through,
             commands::set_compact,

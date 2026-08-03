@@ -396,15 +396,51 @@ pub fn get_snapshots(state: State<'_, AppState>) -> CmdResult<Vec<UsageSnapshot>
 
 /// The bar resizes itself to fit however many providers are enabled, so the
 /// pill never carries dead space.
+///
+/// `width` and `height` arrive already in physical pixels: the caller multiplies
+/// by its own `devicePixelRatio` before sending. That is deliberate, and this
+/// used to convert here with `scale_factor()` instead — which is wrong on any
+/// machine where the two disagree, and they disagree by default whenever the
+/// user has raised Windows' *text* scaling (Accessibility → Text size) without
+/// changing display scaling. Win32 keeps reporting 96 DPI, so `scale_factor()`
+/// returns 1.0, while WebView2 honours the text setting and lays the page out at
+/// `devicePixelRatio` 1.1. Every window then came out ~10% too small for its own
+/// contents, clipping the right edge of the pill and the bottom of an open card.
+///
+/// The webview is the only side that knows the ratio it actually rendered at, so
+/// it is the side that converts.
 #[tauri::command]
 pub fn bar_set_size<R: Runtime>(app: AppHandle<R>, width: u32, height: u32) -> CmdResult<()> {
     if let Some(w) = app.get_webview_window(BAR) {
-        let scale = w.scale_factor().unwrap_or(1.0);
-        let physical = PhysicalSize::new(
-            (width as f64 * scale).round() as u32,
-            (height as f64 * scale).round() as u32,
-        );
-        w.set_size(physical).map_err(|e| e.to_string())?;
+        w.set_size(PhysicalSize::new(width, height))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Resize a secondary window to the size its own webview says it needs.
+///
+/// Same correction as [`bar_set_size`], for the windows whose size comes from
+/// `tauri.conf.json` instead of from their contents. Tauri reads those numbers
+/// as logical pixels and multiplies by `scale_factor()`, which reports 1.0 while
+/// WebView2 lays the page out at `devicePixelRatio` — 1.1 on a machine with
+/// Windows' text size raised. Settings asked for 760 logical and got a 760
+/// *physical* window, leaving the page 691 CSS pixels to fit a 760-wide layout
+/// into.
+///
+/// The caller sends physical pixels it worked out from its own ratio. A window
+/// the user has since resized keeps its size: this only ever runs once, on the
+/// first mount, and only corrects the gap between the two scales.
+#[tauri::command]
+pub fn window_fit<R: Runtime>(
+    app: AppHandle<R>,
+    label: String,
+    width: u32,
+    height: u32,
+) -> CmdResult<()> {
+    if let Some(w) = app.get_webview_window(&label) {
+        w.set_size(PhysicalSize::new(width, height))
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }

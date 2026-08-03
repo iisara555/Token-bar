@@ -146,15 +146,28 @@ function useAutoSize(
     if (!el) return;
 
     const send = () => {
-      const children = Array.from(el.children);
-      if (children.length === 0) return;
-      // Root padding is shadow room; include it so nothing is clipped. The card
-      // can be wider than a short bar, so size for whichever visible surface
-      // currently needs the most room.
-      const w = Math.ceil(
-        Math.max(...children.map((child) => child.getBoundingClientRect().width)) + 24,
+      const children = Array.from(el.children).filter(
+        (child): child is HTMLElement => child instanceof HTMLElement,
       );
-      const h = Math.ceil(el.scrollHeight);
+      if (children.length === 0) return;
+
+      // `offsetWidth`, not `getBoundingClientRect()`: the card animates in from
+      // `scale(0.985)`, and a rect is the *painted* box, so opening a card
+      // measured it about 1.5% narrow — and nothing corrected it, because a
+      // ResizeObserver watches the border box, which a transform never changes.
+      // These are layout metrics and ignore transforms entirely.
+      const cssW = Math.max(el.offsetWidth, ...children.map((c) => c.offsetWidth + 24));
+      const cssH = Math.max(el.scrollHeight, el.offsetHeight);
+
+      // Convert here, not in Rust. These are CSS pixels; the OS window is sized
+      // in physical ones, and `devicePixelRatio` is the only honest exchange
+      // rate — Win32 reports 96 DPI regardless of Windows' text-size setting,
+      // which WebView2 *does* apply, so the native side's `scale_factor()` reads
+      // 1.0 while the page is really laid out at 1.1. See `bar_set_size`.
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.ceil(cssW * dpr);
+      const h = Math.ceil(cssH * dpr);
+
       // Resizing the window re-fires the observer; without this guard the two
       // would trade one-pixel corrections forever.
       if (Math.abs(w - lastSent.current.w) < 2 && Math.abs(h - lastSent.current.h) < 2) {

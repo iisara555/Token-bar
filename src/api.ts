@@ -63,6 +63,8 @@ export const api = {
 
   barSetSize: (width: number, height: number) =>
     run<void>("bar_set_size", { width, height }, mockApi.noop),
+  windowFit: (label: string, width: number, height: number) =>
+    run<void>("window_fit", { label, width, height }, mockApi.noop),
   barDropped: () => run<void>("bar_dropped", undefined, mockApi.noop),
   setClickThrough: (on: boolean) =>
     run<void>("set_click_through", { on }, () => mockApi.setClickThrough(on)),

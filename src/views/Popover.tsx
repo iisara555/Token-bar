@@ -5,9 +5,13 @@ import { money, relativeTime, statusLabel, tokens, totalTokens } from "../format
 import { readingsFor } from "../readings";
 import type { ProviderView, UsageSnapshot } from "../types";
 import { ProviderLogo } from "../components/ProviderLogo";
+import { useWindowFit } from "../state/useWindowFit";
 
 export function Popover() {
   const { view, snapshots, ready, init } = useUsage();
+
+  // Matches the `popover` window in tauri.conf.json.
+  useWindowFit("popover", { width: 380, height: 480 });
 
   useEffect(() => {
     void init();

@@ -11,6 +11,7 @@ import { hotkeyLabel } from "../format";
 import { CloseIcon, KeyIcon } from "../components/Icons";
 import { ProviderLogo } from "../components/ProviderLogo";
 import { detectOs } from "../entries/boot";
+import { useWindowFit } from "../state/useWindowFit";
 
 /** What this desktop calls its own light/dark setting, for the hint copy. */
 const OS_NAMES: Record<ReturnType<typeof detectOs>, string> = {
@@ -31,6 +32,9 @@ export function Settings() {
   // a Mac is a false one.
   const credentialStoreName =
     os === "macos" ? "macOS Keychain" : os === "windows" ? "Windows Credential Manager" : "system credential store";
+
+  // Matches the `settings` window in tauri.conf.json.
+  useWindowFit("settings", { width: 760, height: 620 });
 
   useEffect(() => {
     void init();
