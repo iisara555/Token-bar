@@ -45,16 +45,27 @@ pub fn apply<R: Runtime>(window: &WebviewWindow<R>, pref: GlassPref, dark: bool)
         return GlassMode::Solid;
     }
 
-    // Mica first: on Windows 11 it keeps rounded corners and the window shadow
-    // behaving. Acrylic is the Windows 10 fallback.
+    // No native backdrop on Windows, for any window.
+    //
+    // DWM composites Mica and Acrylic *underneath* the webview, filling the
+    // window's whole content rect. It has no idea the web content draws a
+    // 28px-rounded card, so the material stays a hard rectangle behind it and
+    // shows through at all four corners as a black square. CSS cannot reach
+    // that layer — `clip-path` on the document only ever clips what the webview
+    // itself paints — and DWM's own corner rounding is a fixed ~8px that would
+    // still leave the difference visible.
+    //
+    // Nothing is really lost: `--glass-fill` is `rgba(0, 0, 0, 0.94)`, so the
+    // material was contributing about six percent of a black surface. The bar
+    // has always taken this path (see `apply_bar`); this makes the two secondary
+    // windows agree with it instead of trading a rounded corner for a tint
+    // nobody can see.
     #[cfg(target_os = "windows")]
     {
-        if window_vibrancy::apply_mica(window, Some(dark)).is_ok() {
-            return GlassMode::Native;
-        }
-        if window_vibrancy::apply_acrylic(window, None).is_ok() {
-            return GlassMode::Native;
-        }
+        let _ = dark;
+        let _ = window_vibrancy::clear_mica(window);
+        let _ = window_vibrancy::clear_acrylic(window);
+        let _ = window_vibrancy::clear_blur(window);
     }
 
     #[cfg(target_os = "macos")]
