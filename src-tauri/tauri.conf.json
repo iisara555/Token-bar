@@ -1,0 +1,99 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Token Bar",
+  "version": "0.1.0",
+  "identifier": "com.tokenbar.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5183",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "bar",
+        "title": "Token Bar",
+        "url": "index.html",
+        "width": 560,
+        "height": 64,
+        "minWidth": 240,
+        "minHeight": 56,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "visible": false,
+        "center": false,
+        "dragDropEnabled": false
+      },
+      {
+        "label": "popover",
+        "title": "Token Bar Overview",
+        "url": "popover.html",
+        "width": 380,
+        "height": 480,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "dragDropEnabled": false
+      },
+      {
+        "label": "settings",
+        "title": "Token Bar — Settings",
+        "url": "settings.html",
+        "width": 760,
+        "height": 620,
+        "minWidth": 620,
+        "minHeight": 480,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "skipTaskbar": false,
+        "visible": false,
+        "center": true,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "connect-src": "'self' ipc: http://ipc.localhost",
+        "img-src": "'self' data: asset: http://asset.localhost",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self' data:",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "frame-src": "'none'"
+      },
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "shortDescription": "AI usage toolbar",
+    "longDescription": "Always-on-top toolbar showing live AI API spend and token usage across providers."
+  },
+  "plugins": {}
+}

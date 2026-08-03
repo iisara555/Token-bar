@@ -1,0 +1,68 @@
+[package]
+name = "token-bar"
+version = "0.1.0"
+description = "Always-on-top AI usage toolbar for Windows"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "token_bar_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-notification = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+reqwest = { version = "0.12", default-features = false, features = [
+  "json",
+  "rustls-tls",
+  "gzip",
+] }
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+anyhow = "1"
+rand = "0.8"
+secrecy = "0.10"
+keyring = { version = "3", features = ["windows-native"] }
+rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
+window-vibrancy = "0.6"
+log = "0.4"
+env_logger = "0.11"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+  "Win32_Foundation",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Registry",
+] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[features]
+default = []
+# Serves every adapter from checked-in fixtures so the whole UI runs with zero real keys.
+mock = []
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
