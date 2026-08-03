@@ -73,7 +73,7 @@ pub fn fingerprint(key: &str) -> String {
         .enumerate()
         .filter(|(_, c)| **c == '-' || **c == '_')
         .map(|(i, _)| i + 1)
-        .last()
+        .next_back()
         .unwrap_or(3);
     let prefix: String = chars[..prefix_len].iter().collect();
     let tail: String = chars[chars.len() - 4..].iter().collect();

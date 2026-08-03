@@ -170,7 +170,8 @@ impl Store {
         }
         let spent = readings
             .windows(2)
-            .filter_map(|w| (w[0] > w[1]).then(|| w[0] - w[1]))
+            .filter(|w| w[0] > w[1])
+            .map(|w| w[0] - w[1])
             .sum();
         Ok(Some(spent))
     }

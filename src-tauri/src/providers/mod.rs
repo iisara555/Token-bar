@@ -342,7 +342,7 @@ pub fn redact(input: &str) -> String {
                     out.push('…');
                     out.push_str(&token[token.len() - 4..]);
                 } else {
-                    out.push_str("…");
+                    out.push('…');
                 }
                 rest = &rest[end..];
                 continue 'outer;
