@@ -142,6 +142,14 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
 
+            // Token Bar is a menu bar utility, not an application with windows
+            // a user manages. `Accessory` is what drops it out of the Dock and
+            // out of Cmd-Tab, and stops it taking over the menu bar whenever one
+            // of its panels happens to get focus — the difference between a
+            // status item and an app that merely has one.
+            #[cfg(target_os = "macos")]
+            let _ = handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             let dir = handle
                 .path()
                 .app_data_dir()
@@ -157,6 +165,11 @@ pub fn run() {
             reapply_glass(&handle);
 
             if let Some(bar) = handle.get_webview_window(BAR) {
+                // An always-on-top bar that disappears when you switch Spaces is
+                // an always-on-top bar for one Space. macOS ties window
+                // visibility to Spaces by default; Windows has no equivalent
+                // concept and ignores this.
+                let _ = bar.set_visible_on_all_workspaces(true);
                 floating::restore_position(&bar);
                 floating::set_click_through(&bar, cfg.bar.click_through);
                 if cfg.bar.visible {

@@ -9,17 +9,49 @@ import {
   type ProviderView,
   type ThemeMode,
 } from "../types";
+import { hotkeyLabel } from "../format";
 import { CloseIcon, KeyIcon } from "../components/Icons";
 import { ProviderLogo } from "../components/ProviderLogo";
+import { detectOs } from "../entries/boot";
+
+/** What this desktop calls its own light/dark setting, for the hint copy. */
+const OS_NAMES: Record<ReturnType<typeof detectOs>, string> = {
+  macos: "macOS",
+  windows: "Windows",
+  linux: "your desktop",
+};
 
 export function Settings() {
   const { view, ready, init, reload } = useUsage();
   const [autostart, setAutostart] = useState(false);
   const [autostartReady, setAutostartReady] = useState(false);
+  const os = detectOs();
+  const osName = OS_NAMES[os];
+  const autostartLabel = os === "macos" ? "Open at login" : `Start with ${osName}`;
+  // Naming the actual store matters here: this paragraph is the app's claim
+  // about where a user's admin keys end up, and "Windows Credential Manager" on
+  // a Mac is a false one.
+  const credentialStoreName =
+    os === "macos" ? "macOS Keychain" : os === "windows" ? "Windows Credential Manager" : "system credential store";
 
   useEffect(() => {
     void init();
   }, [init]);
+
+  // A frameless window still owes the user the two ways every window on their
+  // machine closes. Esc is the Windows habit, Cmd-W the Mac one; neither costs
+  // anything to honour on the other platform.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const close =
+        e.key === "Escape" || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "w");
+      if (!close) return;
+      e.preventDefault();
+      void api.hideWindow("settings");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     void api
@@ -62,7 +94,7 @@ export function Settings() {
                 <div>
                   <div className="field-label">Theme</div>
                   <div className="field-hint">
-                    System follows Windows light/dark automatically.
+                    System follows {osName} light/dark automatically.
                   </div>
                 </div>
                 <Segmented<ThemeMode>
@@ -85,7 +117,9 @@ export function Settings() {
                   <div className="field-hint">
                     Currently rendering in <strong>{view.glassMode}</strong> mode.
                     {view.glassMode === "solid" &&
-                      " Windows transparency effects are off, or you turned glass off here."}
+                      (os === "macos"
+                        ? " Reduce transparency is on in Accessibility settings, or you turned glass off here."
+                        : ` ${osName} transparency effects are off, or you turned glass off here.`)}
                   </div>
                 </div>
                 <Segmented<GlassPref>
@@ -107,7 +141,8 @@ export function Settings() {
                   <div className="field-label">Click-through</div>
                   <div className="field-hint">
                     The bar stays visible but stops catching mouse clicks. Use the{" "}
-                    <code>{view.hotkey}</code> hotkey to hide it entirely.
+                    <code>{hotkeyLabel(view.hotkey, os === "macos")}</code> hotkey to hide it
+                    entirely.
                   </div>
                 </div>
                 <Switch
@@ -139,13 +174,18 @@ export function Settings() {
 
               <div className="field">
                 <div>
-                  <div className="field-label">Start with Windows</div>
+                  {/* macOS calls this "Open at Login" everywhere it appears, and
+                      the setting genuinely is a Login Item there rather than a
+                      Run key. Borrowing the platform's own words is the whole
+                      difference between a setting someone recognises and one
+                      they have to reason about. */}
+                  <div className="field-label">{autostartLabel}</div>
                   <div className="field-hint">
                     Launch Token Bar automatically after you sign in.
                   </div>
                 </div>
                 <Switch
-                  label="Start with Windows"
+                  label={autostartLabel}
                   checked={autostart}
                   disabled={!autostartReady}
                   onChange={async (v) => {
@@ -191,13 +231,20 @@ export function Settings() {
           <section>
             <h2 className="section-title">Privacy &amp; credentials</h2>
             <div className="card">
-              <p style={{ fontSize: 12, lineHeight: 1.55, margin: 0, color: "var(--text-dim)" }}>
+              <p
+                style={{
+                  fontSize: "var(--text-sm)",
+                  lineHeight: 1.55,
+                  margin: 0,
+                  color: "var(--text-dim)",
+                }}
+              >
                 OAuth reads the existing <strong>Claude Code, Codex or Kimi Code login</strong>{" "}
                 directly each time. Expired Claude Code access tokens are refreshed through
                 Anthropic and the rotated pair is saved back to that official credentials file.
                 The Link buttons open the provider page in Chrome; Token Bar never reads or copies
-                Chrome cookies. API keys are stored in the <strong>Windows Credential Manager</strong> under{" "}
-                <code>com.tokenbar.app</code>, never in a config file and never in this
+                Chrome cookies. API keys are stored in the <strong>{credentialStoreName}</strong>{" "}
+                under <code>com.tokenbar.app</code>, never in a config file and never in this
                 window — once saved, only the Rust process can read them, and it sends
                 them nowhere but the provider&rsquo;s own API. Removing a key here deletes
                 it from the credential store.

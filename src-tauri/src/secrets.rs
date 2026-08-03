@@ -1,9 +1,15 @@
 //! Credential storage.
 //!
 //! Provider admin keys grant organisation-wide billing read. They live in the
-//! Windows Credential Manager (DPAPI-backed, scoped to the logged-in user) and
-//! nowhere else: not in config.json, not in the SQLite cache, not in
-//! localStorage, and never across the IPC boundary into the webview.
+//! platform credential store and nowhere else: not in config.json, not in the
+//! SQLite cache, not in localStorage, and never across the IPC boundary into
+//! the webview.
+//!
+//! The store is chosen at compile time by the `keyring` features in Cargo.toml:
+//! the Windows Credential Manager (DPAPI-backed) on Windows, the login Keychain
+//! (Security framework) on macOS. Both encrypt at rest and scope the entry to
+//! the logged-in user, and in both cases it is the OS, not this app, that
+//! decides when to prompt for access.
 //!
 //! The UI can ask for a *fingerprint* — enough to tell two keys apart, not
 //! enough to use one.

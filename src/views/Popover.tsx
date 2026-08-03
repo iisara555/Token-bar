@@ -1,9 +1,10 @@
 import { useEffect } from "react";
 import { api } from "../api";
-import { enabledProviders, grandTotal, useUsage } from "../state/useUsage";
+import { enabledProviders, grandTotal, guardLoad, useUsage } from "../state/useUsage";
 import { money, relativeTime, statusLabel, statusTone, tokens, totalTokens } from "../format";
 import { ACCENT, type UsageSnapshot } from "../types";
 import { ProviderLogo } from "../components/ProviderLogo";
+import { StatusBar } from "../components/StatusBar";
 
 export function Popover() {
   const { view, snapshots, ready, init } = useUsage();
@@ -12,7 +13,8 @@ export function Popover() {
     void init();
   }, [init]);
 
-  // Esc closes the panel, matching every other transient popover on Windows.
+  // Esc closes the panel, matching every other transient popover on both
+  // platforms — a menu bar extra's panel on macOS dismisses the same way.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") void api.hideWindow("popover");
@@ -23,20 +25,23 @@ export function Popover() {
 
   const providers = enabledProviders(view);
   const total = grandTotal(view, snapshots);
+  const load = guardLoad(view, snapshots);
 
   return (
     <div className="popover-root">
       <div className="glass popover">
-        <div>
+        <div className="popover-head">
           <div className="section-title">Last {view?.windowDays ?? 30} days</div>
-          <div className="num" style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em" }}>
-            {money(total.cents)}
-          </div>
+          <div className="popover-total num">{money(total.cents)}</div>
           {total.reporting !== total.total && (
-            <div className="faint" style={{ fontSize: 11 }}>
+            <div className="faint" style={{ fontSize: "var(--text-xs)" }}>
               {total.reporting} of {total.total} providers reporting a cost
             </div>
           )}
+          {/* Same rail as the bar, same reading. The popover is where someone
+              looks *after* the rail caught their eye, so it has to be the thing
+              they recognise at the top of it. */}
+          <StatusBar load={load} warnAt={view?.warnAt ?? 0.8} inline />
         </div>
 
         <div className="popover-list">
@@ -67,19 +72,20 @@ export function Popover() {
                 >
                   <ProviderLogo provider={p.id} />
                 </span>
-                <span style={{ textAlign: "left", minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{p.name}</div>
-                  <div className="faint" style={{ fontSize: 10.5 }}>
+                {/* Spans, not divs: a <button>'s content model is phrasing
+                    content, and flow content inside one is invalid markup that
+                    assistive tech is entitled to flatten. */}
+                <span className="popover-row-name">
+                  <span className="popover-row-title">{p.name}</span>
+                  <span className="faint popover-row-meta">
                     {s ? relativeTime(s.fetchedAt) : "no data"}
                     {tokenTotal > 0 && ` · ${tokens(tokenTotal)} tok`}
-                  </div>
+                  </span>
                 </span>
                 <span className="badge" data-tone={statusTone(s?.status ?? "not_configured")}>
                   {statusLabel(s?.status ?? "not_configured")}
                 </span>
-                <span className="num" style={{ fontSize: 13, fontWeight: 650 }}>
-                  {summaryValue(s)}
-                </span>
+                <span className="popover-row-value num">{summaryValue(s)}</span>
               </button>
             );
           })}

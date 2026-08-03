@@ -1,9 +1,10 @@
 //! Native window backdrop.
 //!
-//! Two layers make the glass: this one asks DWM for a real Mica/Acrylic
-//! backdrop, and the CSS in `tokens.css` paints the highlight ring, tint and
-//! noise on top. Either can stand alone — if DWM refuses, the CSS layer still
-//! renders, and if the user has switched transparency effects off in Windows we
+//! Two layers make the glass: this one asks the compositor for a real backdrop
+//! — Mica/Acrylic from DWM on Windows, an `NSVisualEffectView` from AppKit on
+//! macOS — and the CSS in `tokens.css` paints the highlight ring, tint and noise
+//! on top. Either can stand alone: if the compositor refuses, the CSS layer
+//! still renders, and if the user has switched transparency effects off we
 //! deliberately skip both and go opaque rather than fighting their preference.
 
 use serde::Serialize;
@@ -16,10 +17,17 @@ use crate::config::GlassPref;
 pub enum GlassMode {
     /// DWM is painting a real backdrop behind the window.
     Native,
+    /// AppKit is painting an `NSVisualEffectView` behind the window.
+    ///
+    /// Kept distinct from `Native` because the two need different amounts of
+    /// help from CSS: a macOS material arrives already tinted and already
+    /// adapting to what is behind it, so anything CSS adds on top is additive
+    /// where on Windows it is the whole tint.
+    Vibrancy,
     /// No native backdrop; CSS blur only. Still translucent.
     Css,
-    /// Fully opaque. Either the user asked for it, or Windows transparency
-    /// effects are off.
+    /// Fully opaque. Either the user asked for it, or the OS has transparency
+    /// effects switched off.
     Solid,
 }
 
@@ -49,14 +57,40 @@ pub fn apply<R: Runtime>(window: &WebviewWindow<R>, pref: GlassPref, dark: bool)
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        use window_vibrancy::NSVisualEffectMaterial;
+
+        // `Popover` and `HudWindow` are the two materials AppKit intends for
+        // exactly this — small utility panels floating over arbitrary content.
+        // `Popover` is the lighter of the two and is what the system's own
+        // menu-bar extras use, so it is what a Mac user's eye expects here.
+        //
+        // The radius has to match `--radius-card`, or AppKit rounds the
+        // material to a different curve than CSS rounds the surface and leaves
+        // a bright crescent in each corner.
+        let material = if dark {
+            NSVisualEffectMaterial::HudWindow
+        } else {
+            NSVisualEffectMaterial::Popover
+        };
+        if window_vibrancy::apply_vibrancy(window, material, None, Some(16.0)).is_ok() {
+            return GlassMode::Vibrancy;
+        }
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let _ = (window, dark);
 
     GlassMode::Css
 }
 
-/// Keep the toolbar's OS window genuinely transparent. Mica paints the whole
-/// rectangular HWND behind the rounded CSS pill, which leaves square corners.
+/// Keep the toolbar's OS window genuinely transparent.
+///
+/// A native backdrop paints the whole rectangular window behind the rounded CSS
+/// pill, which leaves square corners — true of Mica on Windows and of an
+/// `NSVisualEffectView` on macOS alike, since both fill the window's content
+/// rect rather than whatever shape the web content happens to draw.
 pub fn apply_bar<R: Runtime>(window: &WebviewWindow<R>, pref: GlassPref) -> GlassMode {
     #[cfg(target_os = "windows")]
     {
@@ -65,7 +99,12 @@ pub fn apply_bar<R: Runtime>(window: &WebviewWindow<R>, pref: GlassPref) -> Glas
         let _ = window_vibrancy::clear_blur(window);
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    {
+        let _ = window_vibrancy::clear_vibrancy(window);
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let _ = window;
 
     match pref {
@@ -105,7 +144,41 @@ pub fn transparency_enabled() -> bool {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
+/// System Settings → Accessibility → Display → Reduce transparency.
+///
+/// AppKit already honours this inside `NSVisualEffectView` — the material goes
+/// opaque on its own — but the answer still has to come back here, because the
+/// frontend picks a token set from the reported [`GlassMode`] and would
+/// otherwise keep tinting for a translucent surface that is no longer
+/// translucent, ending up with text on a muddied opaque panel.
+///
+/// Read through `defaults` rather than the Objective-C runtime: it is one
+/// process, only on a glass re-evaluation (startup and settings changes), and
+/// it avoids taking an `objc` dependency for a single boolean.
+///
+/// Absent value means "off", i.e. transparency stays on — that is the macOS
+/// default and a fresh account has no such key at all.
+#[cfg(target_os = "macos")]
+pub fn transparency_enabled() -> bool {
+    let output = std::process::Command::new("defaults")
+        .args(["read", "com.apple.universalaccess", "reduceTransparency"])
+        .output();
+
+    match output {
+        Ok(out) if out.status.success() => {
+            let value = String::from_utf8_lossy(&out.stdout);
+            // Reduced transparency on ("1") means glass off.
+            value.trim() != "1"
+        }
+        // No key, no `defaults`, or a sandbox that blocked the read. Defaulting
+        // to "transparency is on" matches the OS default and is the recoverable
+        // direction: the CSS `prefers-reduced-transparency` query is still
+        // there as a second line of defence if this guessed wrong.
+        _ => true,
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 pub fn transparency_enabled() -> bool {
     true
 }

@@ -91,7 +91,8 @@ export type OAuthStatus = "connected" | "expired" | "not_found";
 
 export type ThemeMode = "system" | "light" | "dark";
 export type GlassPref = "auto" | "on" | "off";
-export type GlassMode = "native" | "css" | "solid";
+/** `native` is DWM Mica/Acrylic; `vibrancy` is an AppKit NSVisualEffectView. */
+export type GlassMode = "native" | "vibrancy" | "css" | "solid";
 
 export interface AppView {
   theme: ThemeMode;

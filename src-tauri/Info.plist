@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Merged into the generated Info.plist by the macOS bundler.
+
+  `set_activation_policy(Accessory)` in lib.rs already produces this behaviour,
+  but it runs during `setup`, by which point AppKit has read the bundle and put
+  an icon in the Dock. Declaring it here means the icon never appears at all,
+  rather than appearing and being withdrawn a beat later.
+-->
+<plist version="1.0">
+  <dict>
+    <key>LSUIElement</key>
+    <true/>
+  </dict>
+</plist>
