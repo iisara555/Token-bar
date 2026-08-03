@@ -75,6 +75,8 @@ export interface ProviderView {
   usesOauth: boolean;
   oauthStatus: OAuthStatus | null;
   needsKey: boolean;
+  /** Whether this provider reads a hand-typed spend figure. */
+  manualEntry: boolean;
   hasKey: boolean;
   /** Masked. The key itself never reaches the frontend. */
   fingerprint: string | null;
@@ -101,6 +103,8 @@ export interface AppView {
   hotkey: string;
   clickThrough: boolean;
   compact: boolean;
+  /** macOS only: the bar may sit in the menu bar strip beside the notch. */
+  allowInNotch: boolean;
   providers: ProviderView[];
   snapshots: UsageSnapshot[];
   version: string;

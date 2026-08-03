@@ -1,0 +1,139 @@
+name: Build
+
+# Installers are built here rather than on a developer's machine because a
+# macOS .dmg can only be produced on macOS — Apple does not allow the SDK to be
+# redistributed, so there is no cross-compile for it from Windows or Linux.
+# Running both targets here also gets the Rust code compiled and tested on both
+# platforms it ships to, on every push.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (universal .dmg)
+            os: macos-14
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            # One download that runs natively on Apple silicon and on Intel.
+            args: --target universal-apple-darwin
+            bundle-dir: src-tauri/target/universal-apple-darwin/release/bundle
+          - name: Windows (.exe installer)
+            os: windows-latest
+            rust-targets: ""
+            args: ""
+            bundle-dir: src-tauri/target/release/bundle
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      # A Tauri build from cold is most of the wall time here.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.os }}
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # Fails fast on a type error before spending minutes in the Rust build.
+      - name: Type-check and build the frontend
+        run: npm run build
+
+      - name: Test
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Build the installers
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # `-` is the ad-hoc identity. An unsigned bundle will not launch at all
+          # on Apple silicon — the loader kills it before Gatekeeper ever gets to
+          # show a prompt — so signing with *something* is required, not
+          # cosmetic. Setting the APPLE_* secrets below switches this to a real
+          # Developer ID and turns on notarisation; without them the build still
+          # produces a working .dmg that warns on first open.
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          args: ${{ matrix.args }}
+
+      - name: Confirm the macOS bundle is signed
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          app="${{ matrix.bundle-dir }}/macos/Token Bar.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign --display --entitlements - "$app"
+
+      - name: Upload macOS installer
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: token-bar-macos-dmg
+          path: ${{ matrix.bundle-dir }}/dmg/*.dmg
+          if-no-files-found: error
+
+      - name: Upload Windows installer
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: token-bar-windows-exe
+          path: ${{ matrix.bundle-dir }}/nsis/*-setup.exe
+          if-no-files-found: error
+
+  # Quality signal, kept off the critical path: a lint regression should be
+  # visible without also withholding the installers.
+  lint:
+    name: Clippy
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: lint
+      - run: npm ci
+      # tauri::generate_context! reads ../dist, so the frontend has to exist
+      # before anything can typecheck the Rust side.
+      - run: npm run build
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Formatting
+        working-directory: src-tauri
+        run: cargo fmt --check

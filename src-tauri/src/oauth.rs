@@ -196,6 +196,20 @@ async fn claude_credential_async(
             ProviderError::Oauth("Claude Code login expired; sign in with Claude Code again".into())
         })?;
 
+    // Parse and validate the document we are going to write back *before*
+    // spending the refresh token. Refresh tokens are single-use, so discovering
+    // a structural problem afterwards would burn the user's login for nothing.
+    let mut document: serde_json::Value = serde_json::from_str(&latest_raw)
+        .map_err(|_| ProviderError::Oauth("Claude Code credentials could not be read".into()))?;
+    if !document
+        .get("claudeAiOauth")
+        .is_some_and(serde_json::Value::is_object)
+    {
+        return Err(ProviderError::Oauth(
+            "Claude Code credentials could not be read".into(),
+        ));
+    }
+
     let token = refresh_claude_token(client, &refresh_token).await?;
     let access_token = token.access_token.clone();
     let expires_at = token
@@ -206,8 +220,6 @@ async fn claude_credential_async(
                 .map(|seconds| Utc::now().timestamp_millis() + seconds * 1000)
         })
         .ok_or_else(|| ProviderError::Oauth("Claude Code refresh returned no expiry".into()))?;
-    let mut document: serde_json::Value = serde_json::from_str(&latest_raw)
-        .map_err(|_| ProviderError::Oauth("Claude Code credentials could not be read".into()))?;
     let oauth = document
         .get_mut("claudeAiOauth")
         .and_then(serde_json::Value::as_object_mut)
@@ -229,18 +241,47 @@ async fn claude_credential_async(
             serde_json::Value::from(refresh_expires_at),
         );
     }
-    std::fs::write(
-        &path,
-        serde_json::to_vec_pretty(&document).map_err(|_| {
-            ProviderError::Oauth("Claude Code credentials could not be saved".into())
-        })?,
-    )
-    .map_err(|_| ProviderError::Oauth("Claude Code credentials could not be saved".into()))?;
+    let encoded = serde_json::to_vec_pretty(&document)
+        .map_err(|_| ProviderError::Oauth("Claude Code credentials could not be saved".into()))?;
+    write_credentials(&path, &encoded)
+        .map_err(|_| ProviderError::Oauth("Claude Code credentials could not be saved".into()))?;
 
     Ok(OAuthCredential {
         access_token: SecretString::from(access_token),
         account_id: None,
     })
+}
+
+/// Replace the official client's credentials file without ever leaving it
+/// truncated.
+///
+/// This file belongs to Claude Code, not to Token Bar: a half-written save here
+/// signs the user out of the CLI they work in, so it gets the same
+/// write-then-rename treatment the app already gives its own config, and the
+/// temporary file is locked down before the rename rather than after — a file
+/// created under the default umask would otherwise become world-readable at the
+/// instant it takes the real file's place.
+fn write_credentials(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    let tmp = path.with_extension("tokenbar-tmp");
+    std::fs::write(&tmp, bytes)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(path)
+            .map(|m| m.permissions().mode() & 0o777)
+            .unwrap_or(0o600);
+        if let Err(e) = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode)) {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
+        }
+    }
+
+    if let Err(e) = std::fs::rename(&tmp, path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    Ok(())
 }
 
 async fn refresh_claude_token(
@@ -492,6 +533,39 @@ mod tests {
         .unwrap();
         let tokens = file.tokens.unwrap();
         assert_eq!(tokens.account_id.as_deref(), Some("account-1"));
+    }
+
+    #[test]
+    fn credentials_are_replaced_without_leaving_a_stray_temp_file() {
+        let dir = std::env::temp_dir().join("token-bar-oauth-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(".credentials.json");
+        std::fs::write(&path, br#"{"claudeAiOauth":{"accessToken":"old"}}"#).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // What the official clients actually write it as.
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        }
+
+        write_credentials(&path, br#"{"claudeAiOauth":{"accessToken":"new"}}"#).unwrap();
+
+        let back = std::fs::read_to_string(&path).unwrap();
+        assert!(back.contains("new"), "{back}");
+        assert!(
+            !path.with_extension("tokenbar-tmp").exists(),
+            "temp file was left behind"
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // The replacement must not be looser than what it replaced.
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o077;
+            assert_eq!(mode, 0, "credentials became group/world readable");
+        }
+
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

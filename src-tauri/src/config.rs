@@ -71,6 +71,13 @@ pub struct BarConfig {
     pub compact: bool,
     #[serde(default = "yes")]
     pub visible: bool,
+    /// macOS only: let the bar sit in the menu bar strip, beside the camera
+    /// housing, instead of being held below it.
+    ///
+    /// Off by default because the menu bar is the system's space and a utility
+    /// that moves in uninvited is a utility that covers someone's clock.
+    #[serde(default)]
+    pub allow_in_notch: bool,
 }
 
 impl Default for BarConfig {
@@ -80,6 +87,7 @@ impl Default for BarConfig {
             click_through: false,
             compact: false,
             visible: true,
+            allow_in_notch: false,
         }
     }
 }

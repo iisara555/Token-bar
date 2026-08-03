@@ -170,7 +170,11 @@ pub fn run() {
             }
 
             tray::build(&handle)?;
-            register_hotkey(&handle, &cfg.hotkey);
+            if let Err(e) = register_hotkey(&handle, &cfg.hotkey, None) {
+                // A clash with another app is not fatal — everything else still
+                // works, and the tray can still show the bar.
+                log::warn!("could not register hotkey {:?}: {e}", cfg.hotkey);
+            }
             refresh_tray(&handle);
 
             // Keep the tray in step with incoming data.
@@ -204,6 +208,8 @@ pub fn run() {
             commands::refresh,
             commands::set_glass,
             commands::set_window_days,
+            commands::set_warn_at,
+            commands::set_hotkey,
             commands::set_provider_enabled,
             commands::set_provider_auth_mode,
             commands::set_provider_option,
@@ -213,6 +219,7 @@ pub fn run() {
             commands::bar_dropped,
             commands::set_click_through,
             commands::set_compact,
+            commands::set_allow_in_notch,
             commands::open_settings,
             commands::open_provider_link,
             commands::hide_window,
@@ -222,12 +229,24 @@ pub fn run() {
         .expect("error while running Token Bar");
 }
 
-fn register_hotkey<R: Runtime>(app: &AppHandle<R>, accelerator: &str) {
+/// Bind the show/hide accelerator, replacing whatever was bound before.
+///
+/// Returns the error rather than only logging it, so the settings command can
+/// refuse to persist an accelerator the OS would not accept and leave the
+/// working one in place.
+pub fn register_hotkey<R: Runtime>(
+    app: &AppHandle<R>,
+    accelerator: &str,
+    previous: Option<&str>,
+) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
+    if let Some(previous) = previous {
+        let _ = app.global_shortcut().unregister(previous);
+    }
+
     let handle = app.clone();
-    let result = app
-        .global_shortcut()
+    app.global_shortcut()
         .on_shortcut(accelerator, move |_, _, event| {
             if event.state() != ShortcutState::Pressed {
                 return;
@@ -240,10 +259,6 @@ fn register_hotkey<R: Runtime>(app: &AppHandle<R>, accelerator: &str) {
                     let _ = w.set_focus();
                 }
             }
-        });
-
-    if let Err(e) = result {
-        // A clash with another app is not fatal — everything else still works.
-        log::warn!("could not register hotkey {accelerator:?}: {e}");
-    }
+        })
+        .map_err(|e| format!("{e}"))
 }

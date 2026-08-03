@@ -37,6 +37,10 @@ export const api = {
     run<void>("set_glass", { glass }, () => mockApi.setGlass(glass)),
   setWindowDays: (days: number) =>
     run<void>("set_window_days", { days }, () => mockApi.setWindowDays(days)),
+  setWarnAt: (fraction: number) =>
+    run<void>("set_warn_at", { fraction }, () => mockApi.setWarnAt(fraction)),
+  setHotkey: (accelerator: string) =>
+    run<void>("set_hotkey", { accelerator }, () => mockApi.setHotkey(accelerator)),
 
   setProviderEnabled: (provider: ProviderId, enabled: boolean) =>
     run<void>("set_provider_enabled", { provider, enabled }, () =>
@@ -64,6 +68,8 @@ export const api = {
     run<void>("set_click_through", { on }, () => mockApi.setClickThrough(on)),
   setCompact: (on: boolean) =>
     run<void>("set_compact", { on }, () => mockApi.setCompact(on)),
+  setAllowInNotch: (on: boolean) =>
+    run<void>("set_allow_in_notch", { on }, () => mockApi.setAllowInNotch(on)),
   isAutostartEnabled: () =>
     isTauri() ? isAutostartEnabled() : mockApi.isAutostartEnabled(),
   setAutostart: (on: boolean) =>

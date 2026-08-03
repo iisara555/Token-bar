@@ -134,16 +134,6 @@ pub enum Status {
     Error,
 }
 
-impl Status {
-    /// Whether the scheduler should keep polling on this status.
-    pub fn is_pollable(self) -> bool {
-        !matches!(
-            self,
-            Status::AuthError | Status::Unsupported | Status::NotConfigured
-        )
-    }
-}
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenBreakdown {
@@ -442,23 +432,16 @@ pub trait Provider: Send + Sync {
         true
     }
 
-    async fn fetch(&self, ctx: &FetchCtx) -> Result<UsageSnapshot, ProviderError>;
-}
+    /// Whether this adapter reads `manual_spend_usd`.
+    ///
+    /// Distinct from `!caps().cost`: DeepSeek, Kimi, Z.AI and MiniMax all report
+    /// no cost figure, but none of them consult a hand-typed one either, so
+    /// offering the field there is a setting that silently does nothing.
+    fn manual_entry(&self) -> bool {
+        false
+    }
 
-pub fn registry() -> Vec<Box<dyn Provider>> {
-    vec![
-        Box::new(anthropic::Anthropic),
-        Box::new(openai::OpenAi),
-        Box::new(kimi::Kimi),
-        Box::new(zai::Zai),
-        Box::new(minimax::MiniMax),
-        Box::new(openrouter::OpenRouter),
-        Box::new(xai::XAi),
-        Box::new(deepseek::DeepSeek),
-        Box::new(gemini::Gemini),
-        Box::new(groq::Groq),
-        Box::new(mistral::Mistral),
-    ]
+    async fn fetch(&self, ctx: &FetchCtx) -> Result<UsageSnapshot, ProviderError>;
 }
 
 pub fn provider_for(id: ProviderId) -> Box<dyn Provider> {
