@@ -80,7 +80,12 @@ impl Store {
             params![snap.provider.as_str(), snap.fetched_at.timestamp(), payload],
         )?;
 
-        if let Some(balance) = snap.balance_cents {
+        // Only a live reading from the provider belongs in the history that
+        // derived spend is computed from. A `Stale` row is last tick's number
+        // repeated, and an `Unsupported` one is a figure the user typed into a
+        // budget field — reading a lowered budget as money spent is exactly the
+        // kind of confident wrong number this app exists to avoid.
+        if let (Some(balance), Status::Ok) = (snap.balance_cents, snap.status) {
             conn.execute(
                 "INSERT OR REPLACE INTO balance_history (provider, at, balance_cents)
                  VALUES (?1, ?2, ?3)",
@@ -250,6 +255,56 @@ mod tests {
             .derived_spend_cents(ProviderId::Deepseek, t0 - chrono::Duration::hours(1))
             .unwrap();
         assert_eq!(spent, Some(150));
+    }
+
+    /// Groq and Mistral publish no API at all: their snapshot's "balance" is
+    /// `budget_usd` minus what the user typed. Recording that as balance history
+    /// made lowering a budget look like money spent.
+    #[test]
+    fn a_manual_entry_balance_is_not_treated_as_history() {
+        let store = Store::in_memory().unwrap();
+        let t0 = Utc::now() - chrono::Duration::hours(2);
+        for (i, budget) in [5000, 2000].into_iter().enumerate() {
+            let mut s = snap(
+                ProviderId::Groq,
+                Some(budget),
+                t0 + chrono::Duration::minutes(i as i64 * 10),
+            );
+            s.status = Status::Unsupported;
+            store.put(&s).unwrap();
+        }
+        assert_eq!(
+            store
+                .derived_spend_cents(ProviderId::Groq, t0 - chrono::Duration::hours(1))
+                .unwrap(),
+            None,
+            "editing a budget was read as $30 of spend"
+        );
+    }
+
+    /// A stale row is the previous reading repeated. Storing it inflates the
+    /// history without adding information.
+    #[test]
+    fn a_stale_reading_is_not_recorded_twice() {
+        let store = Store::in_memory().unwrap();
+        let t0 = Utc::now() - chrono::Duration::hours(1);
+        store.put(&snap(ProviderId::Deepseek, Some(1000), t0)).unwrap();
+
+        let mut repeated = snap(
+            ProviderId::Deepseek,
+            Some(1000),
+            t0 + chrono::Duration::minutes(10),
+        );
+        repeated.status = Status::Stale;
+        store.put(&repeated).unwrap();
+
+        assert_eq!(
+            store
+                .derived_spend_cents(ProviderId::Deepseek, t0 - chrono::Duration::hours(1))
+                .unwrap(),
+            None,
+            "the stale repeat was stored as a second reading"
+        );
     }
 
     #[test]

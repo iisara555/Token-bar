@@ -759,6 +759,17 @@ input::placeholder {
   color: var(--danger);
 }
 
+/* Armed and waiting for a keystroke. The outline is the whole signal that this
+   button has taken over the keyboard, so it stays regardless of focus ring. */
+.btn[data-capturing] {
+  outline: 2px solid var(--accent, var(--warn));
+  outline-offset: 1px;
+}
+
+.field-hint[data-tone="danger"] {
+  color: var(--danger);
+}
+
 /* Switch */
 .switch {
   position: relative;

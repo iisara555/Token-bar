@@ -88,8 +88,15 @@ async fn run(app: AppHandle, id: ProviderId) {
             Ok(mut snap) => {
                 backoff.reset();
                 // Providers that report only a balance get their spend derived
-                // from how far that balance has fallen.
-                if snap.cost_cents.is_none() && snap.balance_cents.is_some() {
+                // from how far that balance has fallen. This only applies to a
+                // balance the provider actually reported: a manual-entry
+                // adapter's "balance" is the user's own budget arithmetic, and
+                // deriving spend from it would turn editing a budget into a
+                // purchase.
+                if snap.cost_cents.is_none()
+                    && snap.balance_cents.is_some()
+                    && provider.caps().balance
+                {
                     let since = Utc::now() - chrono::Duration::days(cfg.window_days);
                     if let Ok(Some(derived)) = state.store.derived_spend_cents(id, since) {
                         snap.cost_cents = Some(derived);

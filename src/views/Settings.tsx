@@ -195,6 +195,68 @@ export function Settings() {
                 />
               </div>
 
+              {os === "macos" && (
+                <div className="field">
+                  <div>
+                    <div className="field-label">Allow in the menu bar</div>
+                    <div className="field-hint">
+                      Let the bar sit up in the menu bar strip. On a Mac with a
+                      camera housing it keeps itself to one side of the notch
+                      rather than hiding behind it.
+                    </div>
+                  </div>
+                  <Switch
+                    label="Allow the bar in the menu bar"
+                    checked={view.allowInNotch}
+                    onChange={async (v) => {
+                      await api.setAllowInNotch(v);
+                      await reload();
+                    }}
+                  />
+                </div>
+              )}
+
+              <div className="field">
+                <div>
+                  <div className="field-label">Shortcut</div>
+                  <div className="field-hint">
+                    Shows and hides the bar. Press a combination with at least one
+                    modifier.
+                  </div>
+                </div>
+                <HotkeyField
+                  accelerator={view.hotkey}
+                  mac={os === "macos"}
+                  onChange={async (next) => {
+                    await api.setHotkey(next);
+                    await reload();
+                  }}
+                />
+              </div>
+
+              <div className="field">
+                <div>
+                  <div className="field-label">Warn at</div>
+                  <div className="field-hint">
+                    How full the tightest budget or rate-limit window gets before the
+                    rail and the tray icon start warning.
+                  </div>
+                </div>
+                <Segmented<string>
+                  value={String(Math.round(view.warnAt * 100))}
+                  options={[
+                    ["60", "60%"],
+                    ["70", "70%"],
+                    ["80", "80%"],
+                    ["90", "90%"],
+                  ]}
+                  onChange={async (v) => {
+                    await api.setWarnAt(Number(v) / 100);
+                    await reload();
+                  }}
+                />
+              </div>
+
               <div className="field">
                 <div>
                   <div className="field-label">Reporting window</div>
@@ -439,7 +501,7 @@ function ProviderRow({
             />
           </label>}
 
-          {!provider.caps.cost && (
+          {provider.manualEntry && (
             <label>
               <span style={{ minWidth: 74 }}>Spend USD</span>
               <input
@@ -540,6 +602,101 @@ function Switch({
       onClick={() => void onChange(!checked)}
     />
   );
+}
+
+/**
+ * Rebind the global shortcut by pressing it.
+ *
+ * Typing an accelerator string by hand means knowing that Tauri spells it
+ * `CmdOrControl+Alt+U`, and getting it wrong costs you the shortcut you had.
+ * Capturing the real keystroke is the only version of this that a user can
+ * succeed at without reading documentation.
+ */
+function HotkeyField({
+  accelerator,
+  mac,
+  onChange,
+}: {
+  accelerator: string;
+  mac: boolean;
+  onChange: (accelerator: string) => Promise<void>;
+}) {
+  const [capturing, setCapturing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!capturing) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      // Capture phase, so the window's own Esc-to-close never sees these.
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === "Escape") {
+        setCapturing(false);
+        return;
+      }
+      const next = acceleratorFrom(e, mac);
+      // Modifiers alone are not a shortcut yet — keep waiting for the key.
+      if (!next) return;
+
+      setCapturing(false);
+      setError(null);
+      void onChange(next).catch((err) => setError(String(err)));
+    };
+
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [capturing, mac, onChange]);
+
+  return (
+    <div style={{ display: "grid", gap: 4, justifyItems: "end" }}>
+      <button
+        type="button"
+        className="btn"
+        aria-label="Change the show/hide shortcut"
+        data-capturing={capturing || undefined}
+        onClick={() => {
+          setError(null);
+          setCapturing(true);
+        }}
+      >
+        <code>{capturing ? "Press keys…" : hotkeyLabel(accelerator, mac)}</code>
+      </button>
+      {error && (
+        <span className="field-hint" data-tone="danger">
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A `KeyboardEvent` as Tauri spells accelerators, or null when the press is not
+ * a usable shortcut yet.
+ *
+ * Reads `code` rather than `key` so the binding follows the physical key: with
+ * `key`, Alt on macOS turns U into `¨` and the accelerator would be recorded as
+ * a dead key. Letters, digits and function keys only — no guessing at names for
+ * keys this has not been checked against.
+ */
+function acceleratorFrom(e: KeyboardEvent, mac: boolean): string | null {
+  const parts: string[] = [];
+  if (mac ? e.metaKey : e.ctrlKey) parts.push("CmdOrControl");
+  if (mac && e.ctrlKey) parts.push("Control");
+  if (e.altKey) parts.push("Alt");
+  if (e.shiftKey) parts.push("Shift");
+  // A shortcut with no modifier would swallow that key everywhere on the system.
+  if (parts.length === 0) return null;
+
+  let key: string | null = null;
+  if (/^Key[A-Z]$/.test(e.code)) key = e.code.slice(3);
+  else if (/^Digit[0-9]$/.test(e.code)) key = e.code.slice(5);
+  else if (/^F([1-9]|1[0-9]|2[0-4])$/.test(e.code)) key = e.code;
+  if (!key) return null;
+
+  return [...parts, key].join("+");
 }
 
 function Segmented<T extends string>({
