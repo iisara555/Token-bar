@@ -5,20 +5,25 @@
 .bar-root {
   /* Padding is shadow room. The window is transparent, so without it the
      drop shadow would be clipped flat against the window edge. */
-  padding: 8px 12px 14px;
+  padding: 6px 10px 10px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-3);
+  gap: var(--space-2);
   width: max-content;
   box-sizing: border-box;
 }
 
+/* The bar sits on top of whatever the user is actually working in, all day, so
+   its size is a cost paid continuously. Everything here is tuned against that:
+   the readings keep their weight, and the chrome around them gives up the room.
+   The old padding scale (--space-4/5) was the one this file uses for *windows*,
+   which on a 40px-tall strip reads as slack rather than as breathing room. */
 .bar {
   display: flex;
   align-items: stretch;
   width: max-content;
-  padding: 0 var(--space-2) 0 var(--space-5);
+  padding: 0 var(--space-1) 0 var(--space-3);
   flex: none;
 }
 
@@ -30,13 +35,18 @@
   cursor: grabbing;
 }
 
+/* A logotype at the head of a toolbar, not a page heading — --text-xl is the
+   size this file gives a card's title, and at that weight the name outranked
+   every reading beside it. Dropped to the readings' own size so the eye lands
+   on a number first and reads the name only when it goes looking for it. */
 .wordmark {
   align-self: center;
-  font-size: var(--text-xl);
+  font-size: var(--text-md);
   font-weight: var(--weight-medium);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   white-space: nowrap;
-  padding-right: var(--space-3);
+  padding-right: var(--space-2);
+  flex: none;
 }
 
 .bar-error {
@@ -53,12 +63,17 @@
 .bar-cell {
   display: flex;
   align-items: stretch;
+  /* Never let a cell absorb a shortfall. The row is sized to its own content by
+     `width: max-content`, so a shrinking cell can only mean the window was
+     mis-measured — and a silently squeezed chip hides that instead of showing
+     it. */
+  flex: none;
 }
 
 .bar-divider {
   width: 1px;
   align-self: center;
-  height: 40px;
+  height: 26px;
   background: var(--hairline);
   flex: none;
 }
@@ -68,10 +83,10 @@
 .chip {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-chip);
-  margin: 6px 4px;
+  margin: 4px 2px;
   transition:
     background-color var(--dur) var(--ease),
     transform var(--dur-fast) var(--ease);
@@ -86,14 +101,28 @@
   background: var(--layer-hover);
 }
 
+/* A provider with no reading collapses to its mark. See ProviderChip for why
+   the status text goes to the tooltip and the card instead of the row. */
+.chip[data-bare] {
+  gap: 0;
+  padding: var(--space-2);
+}
+
 .chip-mark {
   position: relative;
-  width: 26px;
-  height: 26px;
+  width: 20px;
+  height: 20px;
   flex: none;
   display: grid;
   place-items: center;
   color: var(--text);
+}
+
+/* Dimmed, because a provider that is not reporting should not draw the eye as
+   strongly as one that is. The dot stays at full strength — it is the part
+   carrying the state. */
+.chip[data-bare] .chip-mark {
+  color: var(--text-dim);
 }
 
 .provider-logo {
@@ -112,10 +141,10 @@
 .chip-mark[data-status="not_configured"]::after {
   content: "";
   position: absolute;
-  right: -3px;
+  right: -2px;
   bottom: -1px;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   border: 1.5px solid #000;
   background: var(--warn);
@@ -131,15 +160,15 @@
 .chip-meters {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
   min-width: 0;
 }
 
 .chip-status {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   color: var(--text-dim);
   white-space: nowrap;
-  padding: var(--space-2) 0;
+  padding: var(--space-1) 0;
 }
 
 /* --------------------------------- meters --------------------------------- */
@@ -149,9 +178,9 @@
   /* All three columns hug. A `1fr` middle column stretched the track to fill
      whatever width the widest row in the chip happened to need, which pushed
      the reading away from the bar it belongs to. */
-  grid-template-columns: 18px auto auto;
+  grid-template-columns: 15px auto auto;
   align-items: start;
-  gap: 0 var(--space-2);
+  gap: 0 6px;
   /* The chip is a <button>, and a button centres its text. Every label,
      caption and reading inside one starts from the left. */
   text-align: left;
@@ -162,7 +191,7 @@
   font-weight: var(--weight-bold);
   letter-spacing: var(--track-caps);
   color: var(--text);
-  line-height: 11px;
+  line-height: 10px;
   white-space: nowrap;
 }
 
@@ -172,11 +201,16 @@
   min-width: 0;
 }
 
+/* 118px bought precision this instrument was never asked for: nobody reads a
+   value off the track's length — the number is right beside it — so the track's
+   whole job is to say "roughly this full" at a glance. 76px still resolves a
+   few percent, and the 42px it gives back is per provider, so a five-provider
+   bar is over 200px narrower. */
 .meter-track {
   position: relative;
   display: block;
-  width: 118px;
-  height: 11px;
+  width: 76px;
+  height: 7px;
   border-radius: 999px;
   background: var(--meter-track);
   overflow: hidden;
@@ -200,15 +234,18 @@
 
 .meter-caption {
   font-size: 8.5px;
-  line-height: 12px;
+  line-height: 10px;
   letter-spacing: 0.03em;
   color: var(--text-faint);
   white-space: nowrap;
 }
 
+/* The one thing on the bar that is actually read, so it is the one thing that
+   did not shrink proportionally: the chrome around it gave up the room instead.
+   It now outweighs the wordmark, which is the correct order. */
 .meter-value {
-  font-size: var(--text-md);
-  line-height: 12px;
+  font-size: var(--text-base);
+  line-height: 10px;
   font-weight: var(--weight-medium);
   white-space: nowrap;
   text-align: right;
@@ -226,18 +263,17 @@
   display: none;
 }
 .bar[data-compact="true"] .meter-track {
-  width: 72px;
-  height: 9px;
+  width: 46px;
+  height: 6px;
 }
 .bar[data-compact="true"] .chip {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-2);
 }
 .bar[data-compact="true"] .wordmark {
   display: none;
 }
 .bar[data-compact="true"] .meter-value {
-  font-size: var(--text-base);
-  min-width: 46px;
+  font-size: var(--text-sm);
 }
 
 /* -------------------------------- actions --------------------------------- */
@@ -262,9 +298,14 @@
   animation: spin 900ms linear infinite;
 }
 
+/* Scoped to the bar rather than changed on `.icon-btn`, which is also the
+   settings close control — that one is a window chrome affordance and keeps the
+   larger target. */
 .bar-refresh {
   align-self: center;
-  margin-left: var(--space-3);
+  margin-left: var(--space-1);
+  width: 28px;
+  height: 28px;
 }
 
 @keyframes spin {
