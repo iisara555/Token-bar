@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hardened Runtime entitlements, used when a signing identity is present.
+  Unsigned local builds ignore this file entirely.
+
+  Deliberately short. Token Bar's whole security posture is that provider keys
+  live in the Keychain and never cross into the webview, so the entitlements it
+  asks for should be the ones that posture actually needs and nothing else — an
+  entitlement granted "just in case" is a hole that outlives the reason.
+-->
+<plist version="1.0">
+  <dict>
+    <!-- WKWebView's JavaScript engine allocates writable-executable pages. Under
+         the Hardened Runtime the app is killed on launch without this. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- Provider APIs are called over HTTPS from the Rust side. Outbound only:
+         nothing in this app listens. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+  </dict>
+</plist>

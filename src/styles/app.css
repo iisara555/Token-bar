@@ -14,29 +14,42 @@
   box-sizing: border-box;
 }
 
+/* The pill. Two stacked rows: the content, and the guardian rail along its
+   foot. The rail is part of the pill rather than a sibling under it because it
+   reports on the numbers directly above it — separating them would turn one
+   reading into two unrelated ones. */
+.bar-shell {
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  flex: none;
+}
+
 .bar {
   display: flex;
   align-items: center;
   gap: 2px;
   width: max-content;
-  height: 48px;
+  min-width: 100%;
+  height: 44px;
   padding: 0 4px 0 8px;
+  box-sizing: border-box;
   flex: none;
 }
 
-.bar[data-compact="true"] {
-  height: 42px;
+.bar-shell[data-compact="true"] .bar {
+  height: 38px;
   padding-left: 6px;
 }
-.bar[data-compact="true"] .chip {
+.bar-shell[data-compact="true"] .chip {
   padding-inline: 4px;
 }
-.bar[data-compact="true"] .chip-body,
-.bar[data-compact="true"] .chip-spark,
-.bar[data-compact="true"] .total-label {
+.bar-shell[data-compact="true"] .chip-body,
+.bar-shell[data-compact="true"] .chip-spark,
+.bar-shell[data-compact="true"] .total-label {
   display: none;
 }
-.bar[data-compact="true"] .divider {
+.bar-shell[data-compact="true"] .divider {
   margin-inline: 4px;
 }
 
@@ -61,6 +74,103 @@
   height: 18px;
   border-radius: 1px;
   background: var(--text-faint);
+}
+
+/* ------------------------------ guardian rail ----------------------------- */
+/* A hairline across the foot of the bar that fills white → orange as the
+   tightest ceiling anywhere fills up. See StatusBar.tsx for why it is shaped
+   this way. */
+
+.guard {
+  /* Sits inside the pill's rounded end caps, not across them. */
+  padding: 0 var(--space-3) 5px;
+  flex: none;
+}
+
+.guard-track {
+  position: relative;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--guard-track);
+  overflow: hidden;
+  /* Makes the track the reference for the ramp's `cqw` width below, so the ramp
+     spans the whole rail no matter how little of it the fill reveals. */
+  container-type: inline-size;
+}
+
+.guard-fill {
+  position: relative;
+  height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+  /* The rail is the one place motion is worth it: the fill moving is how a
+     glance registers that something changed since the last glance. */
+  transition: width var(--dur-slow) var(--ease);
+  box-shadow: inset 0 0 0 0.5px var(--guard-edge);
+}
+
+/* Painted at the track's full width and clipped by the fill, so the ramp is
+   sampled at the same position regardless of how much shows. */
+.guard-ramp {
+  position: absolute;
+  inset: 0;
+  /* Track width, not fill width. `min-width` is the fallback for a renderer
+     without container units: the ramp compresses into the fill, which loses the
+     "leading edge names the value" property but still reads correctly. */
+  min-width: 100%;
+  width: 100cqw;
+  border-radius: inherit;
+  background: var(--guard-ramp);
+}
+
+.guard-mark {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--text) 30%, transparent);
+  transform: translateX(-0.5px);
+}
+
+/* Dormant: nothing has a ceiling to measure. The track stays, quieter, so the
+   bar keeps its shape and the rail does not appear to have gone missing. */
+.guard[data-state="dormant"] .guard-track {
+  background: color-mix(in srgb, var(--guard-track) 45%, transparent);
+}
+
+/* Over the ceiling there is no length left to spend, so the reading moves to
+   the fill itself: it goes solid at the hot end of the ramp instead of ending
+   in it. Still no hue outside the ramp, and still no animation. */
+.guard[data-state="over"] .guard-ramp {
+  background: linear-gradient(
+    90deg,
+    var(--guard-80) 0%,
+    var(--guard-100) 55%,
+    var(--guard-100) 100%
+  );
+}
+
+.guard[data-state="over"] .guard-fill {
+  box-shadow:
+    inset 0 0 0 0.5px color-mix(in srgb, var(--guard-100) 55%, transparent),
+    0 0 6px color-mix(in srgb, var(--guard-100) 45%, transparent);
+}
+
+.guard[data-state="over"] .guard-mark {
+  display: none;
+}
+
+/* In the compact bar the rail is the *only* thing left saying how close the
+   ceiling is, since the numeric sublabels are hidden. Give it another pixel. */
+.bar-shell[data-compact="true"] .guard-track {
+  height: 4px;
+}
+
+/* Inside the popover and the detail panel the rail is a section rule rather
+   than the bar's foot, so it loses the pill inset. */
+.guard--inline {
+  padding: 0;
 }
 
 /* --------------------------------- chips ---------------------------------- */
@@ -142,14 +252,16 @@
 }
 
 .chip-value {
-  font-size: 13px;
-  font-weight: 620;
-  letter-spacing: -0.01em;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-snug);
   white-space: nowrap;
 }
 
+/* Was 10px. This line carries words — "left", "1.2M tok", a provider name —
+   and 10px is the floor for tracked-out all-caps, not for running text. */
 .chip-sub {
-  font-size: 10px;
+  font-size: var(--text-xs);
   color: var(--text-faint);
   white-space: nowrap;
 }
@@ -175,21 +287,24 @@
 
 .quota-mini-value {
   color: var(--text);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
 }
 
+/* Both of these were 8px — small enough that SF's hinting gives up and the
+   counters in "RESET" fill in solid. 10px is the floor, and it is only allowed
+   here because the content is short all-caps with generous tracking. */
 .quota-mini-label {
   color: var(--text-faint);
-  font-size: 8px;
-  font-weight: 650;
-  letter-spacing: 0.055em;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-caps);
 }
 
 .quota-mini-reset {
   color: var(--text-faint);
-  font-size: 8px;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
@@ -222,13 +337,13 @@
   line-height: 1.15;
 }
 .total-value {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--track-snug);
 }
 .total-label {
-  font-size: 9px;
-  letter-spacing: 0.06em;
+  font-size: var(--text-2xs);
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
   color: var(--text-faint);
 }
@@ -297,14 +412,14 @@
   margin-bottom: var(--space-3);
 }
 .panel-title {
-  font-size: 14px;
-  font-weight: 650;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
 .panel-meta {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-faint);
 }
 
@@ -333,13 +448,13 @@
   justify-content: space-between;
   align-items: baseline;
   gap: var(--space-3);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
 .quota-card-head strong {
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 .quota-track {
@@ -367,7 +482,7 @@
 
 .quota-reset {
   margin-top: 6px;
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-faint);
 }
 
@@ -381,12 +496,12 @@
   display: flex;
   justify-content: space-between;
   gap: var(--space-3);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   padding: 3px 0;
   border-bottom: 1px solid var(--hairline);
 }
 .stat span:last-child {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .notice {
@@ -394,7 +509,7 @@
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--layer);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   color: var(--text-dim);
   display: flex;
   gap: var(--space-2);
@@ -443,6 +558,34 @@
 .popover-row:hover {
   background: var(--layer-hover);
 }
+.popover-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.popover-total {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--track-tight);
+  line-height: 1.1;
+}
+.popover-row-name {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  min-width: 0;
+}
+.popover-row-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+.popover-row-meta {
+  font-size: var(--text-xs);
+}
+.popover-row-value {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+}
 .popover-foot {
   display: flex;
   justify-content: space-between;
@@ -478,9 +621,24 @@
   flex: none;
   cursor: grab;
 }
+
+/* The window is frameless on both platforms, so the close control is ours to
+   place. Mac users reach for the top-left corner; Windows users reach for the
+   top-right. Flipping the row is the whole change — the title stays put by
+   sitting after the button in source order and taking the free space. */
+:root[data-os="macos"] .titlebar {
+  flex-direction: row-reverse;
+}
+:root[data-os="macos"] .titlebar h1 {
+  flex: 1;
+  text-align: center;
+  /* Keeps the title optically centred rather than centred in the space left
+     over beside the button. */
+  margin-right: 28px;
+}
 .titlebar h1 {
-  font-size: 13px;
-  font-weight: 650;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
   margin: 0;
 }
 
@@ -507,10 +665,29 @@
   background-clip: padding-box;
 }
 
+/* macOS has one scrollbar behaviour and the user chose it in System Settings:
+   overlay by default, always-visible if they asked for that, and it fades on
+   its own schedule. Styling a permanent gutter over the top of that is the
+   single most obvious tell of a ported app, and it also silently overrides
+   "Show scroll bars: Always" for anyone who set it deliberately. Hand it back. */
+:root[data-os="macos"] .settings-body {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+:root[data-os="macos"] .settings-body::-webkit-scrollbar {
+  width: auto;
+}
+:root[data-os="macos"] .settings-body::-webkit-scrollbar-thumb,
+:root[data-os="macos"] .settings-body::-webkit-scrollbar-track {
+  background: initial;
+  border: initial;
+  border-radius: initial;
+}
+
 .section-title {
-  font-size: 11px;
+  font-size: var(--text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--track-caps);
   color: var(--text-faint);
   margin: 0 0 var(--space-2);
 }
@@ -533,13 +710,14 @@
   border-top: 1px solid var(--hairline);
 }
 .field-label {
-  font-size: 13px;
+  font-size: var(--text-base);
 }
 .field-hint {
-  font-size: 11px;
-  color: var(--text-faint);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
   margin-top: 2px;
   max-width: 46ch;
+  line-height: 1.4;
 }
 
 input[type="text"],
@@ -547,7 +725,7 @@ input[type="password"],
 input[type="number"],
 select {
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--text);
   background: var(--glass-fill-strong);
   border: 1px solid var(--glass-border);
@@ -561,8 +739,8 @@ input::placeholder {
 }
 
 .btn {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   padding: 6px var(--space-3);
   border-radius: var(--radius-sm);
   background: var(--layer-hover);
@@ -594,6 +772,14 @@ input::placeholder {
 .switch[aria-checked="true"] {
   background: var(--ok);
 }
+/* Every switch on macOS is the user's chosen accent colour, and they can change
+   it. Green here would read as a status light rather than as "on". */
+:root[data-os="macos"] .switch[aria-checked="true"] {
+  background: AccentColor;
+}
+:root[data-os="macos"] .segmented button[aria-pressed="true"] {
+  color: var(--text);
+}
 .switch:disabled {
   cursor: wait;
   opacity: 0.55;
@@ -623,8 +809,8 @@ input::placeholder {
   gap: 2px;
 }
 .segmented button {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   padding: 4px var(--space-3);
   border-radius: 6px;
   color: var(--text-dim);
@@ -647,7 +833,7 @@ input::placeholder {
 }
 .provider-link {
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--text-xs);
   padding-inline: 9px;
 }
 .provider-row + .provider-row {
@@ -664,7 +850,7 @@ input::placeholder {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-dim);
 }
 .provider-detail input {
@@ -687,13 +873,13 @@ input::placeholder {
   border-radius: var(--radius-sm);
   border: 1px solid color-mix(in srgb, var(--ok) 28%, transparent);
   background: color-mix(in srgb, var(--ok) 9%, transparent);
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
 .oauth-status strong {
   color: var(--ok);
-  font-size: 11.5px;
+  font-size: var(--text-xs);
 }
 
 .oauth-status[data-status="expired"],
@@ -708,8 +894,8 @@ input::placeholder {
 }
 
 .badge {
-  font-size: 10px;
-  font-weight: 650;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
   letter-spacing: 0.03em;
   text-transform: uppercase;
   padding: 2px 6px;
@@ -736,6 +922,6 @@ input::placeholder {
   height: 100%;
   text-align: center;
   color: var(--text-dim);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   padding: 0 var(--space-5);
 }

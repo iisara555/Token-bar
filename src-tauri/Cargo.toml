@@ -1,7 +1,7 @@
 [package]
 name = "token-bar"
 version = "0.1.0"
-description = "Always-on-top AI usage toolbar for Windows"
+description = "Always-on-top AI usage toolbar for macOS and Windows"
 edition = "2021"
 rust-version = "1.77"
 
@@ -13,7 +13,11 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
+# `macos-private-api` is what `macOSPrivateApi` in tauri.conf.json compiles
+# against. Without it a transparent window on macOS renders opaque black behind
+# the rounded pill, so it is load-bearing rather than a nicety — and the two
+# have to be set together or the build refuses.
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-notification = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
@@ -33,13 +37,18 @@ thiserror = "2"
 anyhow = "1"
 rand = "0.8"
 secrecy = "0.10"
-keyring = { version = "3", features = ["windows-native"] }
+# The backend is chosen per target below. Enabling `windows-native` on a Mac
+# build does not fail loudly — keyring silently falls back to an in-memory store
+# that forgets every key on quit, so this has to be right rather than merely
+# compile.
+keyring = { version = "3", default-features = false }
 rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
 window-vibrancy = "0.6"
 log = "0.4"
 env_logger = "0.11"
 
 [target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
 windows = { version = "0.58", features = [
   "Win32_Foundation",
   "Win32_UI_Shell",
@@ -48,6 +57,17 @@ windows = { version = "0.58", features = [
   "Win32_Graphics_Gdi",
   "Win32_System_Registry",
 ] }
+
+# Keychain, via the Security framework. Same guarantee as DPAPI on Windows:
+# encrypted at rest and scoped to the logged-in user, with the OS — not this
+# app — deciding when to prompt.
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+# Not a supported target for the packaged app, but `cargo test` on a Linux CI
+# runner has to link something. Secret Service is the desktop-standard choice.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2"

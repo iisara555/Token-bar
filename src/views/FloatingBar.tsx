@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { enabledProviders, grandTotal, useUsage } from "../state/useUsage";
+import { enabledProviders, grandTotal, guardLoad, useUsage } from "../state/useUsage";
 import { money } from "../format";
 import { ProviderChip } from "../components/ProviderChip";
 import { DetailPanel } from "../components/DetailPanel";
+import { StatusBar } from "../components/StatusBar";
 import { RefreshIcon, SettingsIcon } from "../components/Icons";
 import type { ProviderId } from "../types";
 
@@ -40,12 +41,10 @@ export function FloatingBar() {
   if (error) {
     return (
       <div className="bar-root" ref={rootRef}>
-        <div
-          className="glass glass--pill bar"
-          data-compact={view?.compact}
-          data-tauri-drag-region
-        >
-          <span style={{ fontSize: 12, padding: "0 8px" }}>{error}</span>
+        <div className="glass glass--pill bar-shell" data-compact={view?.compact}>
+          <div className="bar" data-tauri-drag-region>
+            <span style={{ fontSize: "var(--text-sm)", padding: "0 8px" }}>{error}</span>
+          </div>
         </div>
       </div>
     );
@@ -54,6 +53,7 @@ export function FloatingBar() {
   const providers = enabledProviders(view);
   const total = grandTotal(view, snapshots);
   const active = providers.find((p) => p.id === expanded);
+  const load = guardLoad(view, snapshots);
   const hasQuotaProviders = providers.some((p) => {
     const limits = snapshots[p.id]?.limits;
     return Boolean(limits?.fiveHour || limits?.week);
@@ -61,70 +61,70 @@ export function FloatingBar() {
 
   return (
     <div className="bar-root" ref={rootRef}>
-      <div
-        className="glass glass--pill bar"
-        data-compact={view?.compact}
-        data-tauri-drag-region
-      >
-        <span className="bar-grip" data-tauri-drag-region aria-hidden />
+      <div className="glass glass--pill bar-shell" data-compact={view?.compact}>
+        <div className="bar" data-tauri-drag-region>
+          <span className="bar-grip" data-tauri-drag-region aria-hidden />
 
-        {providers.length === 0 ? (
-          <span className="dim" style={{ fontSize: 12, padding: "0 6px" }}>
-            No providers enabled
+          {providers.length === 0 ? (
+            <span className="dim" style={{ fontSize: "var(--text-sm)", padding: "0 6px" }}>
+              No providers enabled
+            </span>
+          ) : (
+            providers.map((p) => (
+              <ProviderChip
+                key={p.id}
+                provider={p}
+                snapshot={snapshots[p.id]}
+                expanded={expanded === p.id}
+                onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
+              />
+            ))
+          )}
+
+          <span className="divider" aria-hidden />
+
+          <span className="total">
+            <span className="total-value num">
+              {total.reporting > 0
+                ? money(total.cents)
+                : hasQuotaProviders
+                  ? "LIVE"
+                  : money(total.cents)}
+            </span>
+            <span className="total-label">
+              {/* Never present a partial sum as the whole picture. */}
+              {total.reporting === 0 && hasQuotaProviders
+                ? "limits remaining"
+                : total.reporting === total.total
+                ? `${view?.windowDays ?? 30}d total`
+                : `${total.reporting}/${total.total} reporting`}
+            </span>
           </span>
-        ) : (
-          providers.map((p) => (
-            <ProviderChip
-              key={p.id}
-              provider={p}
-              snapshot={snapshots[p.id]}
-              expanded={expanded === p.id}
-              onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
-            />
-          ))
-        )}
 
-        <span className="divider" aria-hidden />
-
-        <span className="total">
-          <span className="total-value num">
-            {total.reporting > 0
-              ? money(total.cents)
-              : hasQuotaProviders
-                ? "LIVE"
-                : money(total.cents)}
+          <span className="bar-actions">
+            <button
+              type="button"
+              className="icon-btn"
+              data-spinning={spinning}
+              onClick={onRefresh}
+              title="Refresh now"
+            >
+              <RefreshIcon />
+              <span className="sr-only">Refresh</span>
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => void api.openSettings()}
+              title="Settings"
+            >
+              <SettingsIcon />
+              <span className="sr-only">Settings</span>
+            </button>
           </span>
-          <span className="total-label">
-            {/* Never present a partial sum as the whole picture. */}
-            {total.reporting === 0 && hasQuotaProviders
-              ? "limits remaining"
-              : total.reporting === total.total
-              ? `${view?.windowDays ?? 30}d total`
-              : `${total.reporting}/${total.total} reporting`}
-          </span>
-        </span>
+        </div>
 
-        <span className="bar-actions">
-          <button
-            type="button"
-            className="icon-btn"
-            data-spinning={spinning}
-            onClick={onRefresh}
-            title="Refresh now"
-          >
-            <RefreshIcon />
-            <span className="sr-only">Refresh</span>
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => void api.openSettings()}
-            title="Settings"
-          >
-            <SettingsIcon />
-            <span className="sr-only">Settings</span>
-          </button>
-        </span>
+        <StatusBar load={load} warnAt={view?.warnAt ?? 0.8} />
       </div>
 
       {active && (

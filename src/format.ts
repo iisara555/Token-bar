@@ -105,6 +105,53 @@ export function statusTone(s: Status): "ok" | "warn" | "danger" | "neutral" {
   }
 }
 
+/**
+ * A Tauri accelerator, written the way the platform writes shortcuts.
+ *
+ * The stored value is `CmdOrControl+Alt+U` — correct as configuration, and
+ * meaningless as a label. Windows spells the same shortcut `Ctrl+Alt+U`; macOS
+ * spells it `⌥⌘U`, with no separators and with the modifiers in the fixed order
+ * Apple uses everywhere (⌃⌥⇧⌘), because a Mac user reads that as one glyph
+ * cluster rather than as a sentence to parse.
+ */
+export function hotkeyLabel(accelerator: string, mac: boolean): string {
+  const parts = accelerator.split("+").map((p) => p.trim()).filter(Boolean);
+
+  if (!mac) {
+    return parts
+      .map((p) => (/^(cmdorcontrol|commandorcontrol|cmdorctrl)$/i.test(p) ? "Ctrl" : p))
+      .join("+");
+  }
+
+  const SYMBOL: Record<string, string> = {
+    cmdorcontrol: "⌘",
+    commandorcontrol: "⌘",
+    cmdorctrl: "⌘",
+    cmd: "⌘",
+    command: "⌘",
+    super: "⌘",
+    ctrl: "⌃",
+    control: "⌃",
+    alt: "⌥",
+    option: "⌥",
+    shift: "⇧",
+  };
+  // Apple's canonical modifier order. Anything unrecognised is a key, not a
+  // modifier, and sorts to the end where the key belongs.
+  const ORDER = ["⌃", "⌥", "⇧", "⌘"];
+
+  const symbols: string[] = [];
+  const keys: string[] = [];
+  for (const part of parts) {
+    const symbol = SYMBOL[part.toLowerCase()];
+    if (symbol) symbols.push(symbol);
+    else keys.push(part.length === 1 ? part.toUpperCase() : part);
+  }
+
+  symbols.sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+  return [...symbols, ...keys].join("");
+}
+
 /** Budget usage as a 0..1+ ratio, or null when no budget is set. */
 export function budgetRatio(
   spentCents: number | null,

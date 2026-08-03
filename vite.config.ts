@@ -12,7 +12,12 @@ export default defineConfig({
     watch: { ignored: ["**/src-tauri/**"] },
   },
   build: {
-    target: "chrome110", // WebView2 evergreen
+    // Both webviews this ships into: WebView2 (Chromium) on Windows and
+    // WKWebView (Safari) on macOS. Targeting Chromium alone let esbuild emit
+    // syntax Safari 15 cannot parse, which fails as a blank window rather than
+    // as a build error — the macOS floor is set by Tauri's own 10.15 minimum,
+    // so it has to be named explicitly.
+    target: ["chrome110", "safari15"],
     sourcemap: process.env.TAURI_ENV_DEBUG === "true",
     minify: process.env.TAURI_ENV_DEBUG === "true" ? false : "esbuild",
     rollupOptions: {
