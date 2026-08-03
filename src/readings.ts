@@ -15,6 +15,8 @@ export interface Reading {
   key: string;
   /** Toolbar tag: "5H", "W", "$". */
   shortLabel: string;
+  /** Status panel column: "5 Hour", "Weekly", "Total available". */
+  panelLabel: string;
   /** Card heading: "5 hour limit". */
   longLabel: string;
   /** 0–100, or null when the provider reports no ceiling to measure against. */
@@ -53,6 +55,7 @@ export function readingsFor(
     out.push({
       key: "fiveHour",
       shortLabel: "5H",
+      panelLabel: "5 Hour",
       longLabel: "5 hour limit",
       percent: remaining,
       value: `${remaining}%`,
@@ -68,6 +71,7 @@ export function readingsFor(
     out.push({
       key: "week",
       shortLabel: "W",
+      panelLabel: "Weekly",
       longLabel: "Weekly limit",
       percent: remaining,
       value: `${remaining}%`,
@@ -94,6 +98,7 @@ export function readingsFor(
     out.push({
       key: "balance",
       shortLabel: "$",
+      panelLabel: "Total available",
       longLabel: "Total available",
       percent,
       value: money(balanceCents),
@@ -121,6 +126,7 @@ export function readingsFor(
     out.push({
       key: "cost",
       shortLabel: "$",
+      panelLabel: budget === null ? "Spend" : "Budget left",
       longLabel: budget === null ? "Spend" : "Budget remaining",
       percent,
       value: money(costCents),
@@ -138,6 +144,45 @@ export function readingsFor(
   }
 
   return out;
+}
+
+/**
+ * The single meter at the top of the status panel: how much headroom is left at
+ * the tightest constraint anywhere.
+ *
+ * Tightest, not average. Averaging is what turns "the weekly limit is 2% from
+ * gone" into a comfortable-looking 70%, and a summary that can only ever look
+ * calmer than reality is worse than no summary.
+ *
+ * Note this is deliberately *not* a bar for the spend figure it sits under.
+ * Most accounts have no budget set, so a spend meter would have no denominator
+ * and would be inventing its own scale — and where a budget does exist it is
+ * per-provider, so there is no honest way to add them into one bar. Headroom is
+ * the thing that is always defined and always comparable.
+ */
+export function tightestHeadroom(
+  entries: { provider: ProviderView; snapshot: UsageSnapshot | undefined }[],
+): { percent: number; label: string; ramp: Ramp } | null {
+  let worst: { percent: number; label: string; ramp: Ramp } | null = null;
+
+  for (const { provider, snapshot } of entries) {
+    for (const r of readingsFor(provider, snapshot)) {
+      if (r.percent === null) continue;
+      if (worst === null || r.percent < worst.percent) {
+        worst = {
+          percent: r.percent,
+          label: `Tightest: ${provider.name} ${r.panelLabel.toLowerCase()}, ${Math.round(r.percent)}% left`,
+          // The ramp comes from the reading itself rather than being fixed
+          // warm. This bar *is* that reading shown large, so letting it wear a
+          // different ramp than the row it came from would be the one place in
+          // the app where the ramp stops naming the kind of limit.
+          ramp: r.ramp,
+        };
+      }
+    }
+  }
+
+  return worst;
 }
 
 /** "Reset in 3h : Aug 3, 12:50 PM" — the countdown and the wall clock together. */
