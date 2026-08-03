@@ -1,0 +1,50 @@
+{
+  "data": [
+    {
+      "starting_at": "2026-07-30T00:00:00Z",
+      "ending_at": "2026-07-31T00:00:00Z",
+      "results": [
+        {
+          "currency": "USD",
+          "amount": "12.34",
+          "workspace_id": null,
+          "description": "Claude Opus 5 Input Tokens",
+          "cost_type": "tokens",
+          "context_window": "0-200k",
+          "model": "claude-opus-5",
+          "service_tier": "standard",
+          "token_type": "uncached_input_tokens"
+        },
+        {
+          "currency": "USD",
+          "amount": "0.56",
+          "workspace_id": "wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ",
+          "description": "Claude Opus 5 Output Tokens",
+          "cost_type": "tokens",
+          "context_window": "0-200k",
+          "model": "claude-opus-5",
+          "service_tier": "standard",
+          "token_type": "output_tokens"
+        }
+      ]
+    },
+    {
+      "starting_at": "2026-07-31T00:00:00Z",
+      "ending_at": "2026-08-01T00:00:00Z",
+      "results": [
+        {
+          "currency": "USD",
+          "amount": "3.10",
+          "workspace_id": null,
+          "description": "Code Execution Usage",
+          "cost_type": "code_execution",
+          "model": null,
+          "service_tier": null,
+          "token_type": null
+        }
+      ]
+    }
+  ],
+  "has_more": true,
+  "next_page": "page_MjAyNS0wMS0wMlQwMDowMDowMFo="
+}

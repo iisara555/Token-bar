@@ -1,0 +1,39 @@
+{
+  "object": "page",
+  "data": [
+    {
+      "object": "bucket",
+      "start_time": 1785369600,
+      "end_time": 1785456000,
+      "results": [
+        {
+          "object": "organization.costs.result",
+          "amount": { "value": 5.2, "currency": "usd" },
+          "line_item": "gpt-5.5, input",
+          "project_id": "proj_abc123"
+        },
+        {
+          "object": "organization.costs.result",
+          "amount": { "value": 1.22, "currency": "usd" },
+          "line_item": "gpt-5.5, output",
+          "project_id": "proj_abc123"
+        }
+      ]
+    },
+    {
+      "object": "bucket",
+      "start_time": 1785456000,
+      "end_time": 1785542400,
+      "results": [
+        {
+          "object": "organization.costs.result",
+          "amount": { "value": 0.87, "currency": "usd" },
+          "line_item": "gpt-5.4-mini, input",
+          "project_id": "proj_abc123"
+        }
+      ]
+    }
+  ],
+  "has_more": false,
+  "next_page": null
+}
