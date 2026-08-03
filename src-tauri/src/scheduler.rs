@@ -82,16 +82,27 @@ async fn run(app: AppHandle, id: ProviderId) {
         };
 
         let result = provider.fetch(&ctx).await;
-        let state = app.state::<AppState>();
 
+        // The state handle is taken per use rather than held across the awaits
+        // below. `drop()` on it was a no-op — it is a borrow, not a guard — so
+        // letting each temporary end with its statement is what actually keeps
+        // it off the await points.
         let snapshot = match result {
             Ok(mut snap) => {
                 backoff.reset();
                 // Providers that report only a balance get their spend derived
-                // from how far that balance has fallen.
-                if snap.cost_cents.is_none() && snap.balance_cents.is_some() {
+                // from how far that balance has fallen. This only applies to a
+                // balance the provider actually reported: a manual-entry
+                // adapter's "balance" is the user's own budget arithmetic, and
+                // deriving spend from it would turn editing a budget into a
+                // purchase.
+                if snap.cost_cents.is_none()
+                    && snap.balance_cents.is_some()
+                    && provider.caps().balance
+                {
                     let since = Utc::now() - chrono::Duration::days(cfg.window_days);
-                    if let Ok(Some(derived)) = state.store.derived_spend_cents(id, since) {
+                    let derived = app.state::<AppState>().store.derived_spend_cents(id, since);
+                    if let Ok(Some(derived)) = derived {
                         snap.cost_cents = Some(derived);
                     }
                 }
@@ -116,13 +127,13 @@ async fn run(app: AppHandle, id: ProviderId) {
                     // and wait until settings change.
                     Status::AuthError | Status::NotConfigured => {
                         let snap = UsageSnapshot::empty(id, status).with_message(msg);
-                        state.store.put(&snap).ok();
-                        drop(state);
+                        app.state::<AppState>().store.put(&snap).ok();
                         publish(&app, snap);
                         wait_for_wake(&app, id).await;
                         continue;
                     }
-                    _ => state
+                    _ => app
+                        .state::<AppState>()
                         .store
                         .stale_fallback(id, msg.clone())
                         .unwrap_or_else(|_| UsageSnapshot::empty(id, status).with_message(msg)),
@@ -130,11 +141,10 @@ async fn run(app: AppHandle, id: ProviderId) {
             }
         };
 
-        state.store.put(&snapshot).ok();
-        drop(state);
+        app.state::<AppState>().store.put(&snapshot).ok();
         publish(&app, snapshot);
 
-        let wait = backoff.next();
+        let wait = backoff.next_delay();
         sleep_or_wake(&app, id, wait).await;
     }
 }
@@ -212,7 +222,9 @@ impl Backoff {
         self.forced = Some(d);
     }
 
-    pub fn next(&mut self) -> Duration {
+    /// Not `next()`: a method by that name on a non-iterator reads as one, and
+    /// this returns how long to wait rather than the next item of anything.
+    pub fn next_delay(&mut self) -> Duration {
         let raw = match self.forced.take() {
             Some(d) => d,
             None if self.failures == 0 => self.base,
@@ -240,7 +252,7 @@ mod tests {
     #[test]
     fn first_interval_is_the_providers_own_cadence() {
         let mut b = Backoff::new(Duration::from_secs(120));
-        let d = b.next();
+        let d = b.next_delay();
         assert!(
             d >= Duration::from_secs(96) && d <= Duration::from_secs(144),
             "{d:?}"
@@ -252,7 +264,7 @@ mod tests {
         let mut b = Backoff::new(Duration::from_secs(60));
         b.bump();
         b.bump();
-        let d = b.next();
+        let d = b.next_delay();
         // 60 * 2^2 = 240s, ±20%
         assert!(d >= Duration::from_secs(192), "{d:?}");
     }
@@ -263,7 +275,7 @@ mod tests {
         for _ in 0..20 {
             b.bump();
         }
-        assert!(b.next() <= Duration::from_secs_f64(MAX_BACKOFF.as_secs_f64() * 1.2));
+        assert!(b.next_delay() <= Duration::from_secs_f64(MAX_BACKOFF.as_secs_f64() * 1.2));
     }
 
     #[test]
@@ -273,14 +285,14 @@ mod tests {
             b.bump();
         }
         b.reset();
-        assert!(b.next() <= Duration::from_secs(72));
+        assert!(b.next_delay() <= Duration::from_secs(72));
     }
 
     #[test]
     fn retry_after_overrides_the_curve() {
         let mut b = Backoff::new(Duration::from_secs(60));
         b.honour(Duration::from_secs(600));
-        let d = b.next();
+        let d = b.next_delay();
         assert!(
             d >= Duration::from_secs(480) && d <= Duration::from_secs(720),
             "{d:?}"
@@ -290,6 +302,6 @@ mod tests {
     #[test]
     fn never_sleeps_for_less_than_five_seconds() {
         let mut b = Backoff::new(Duration::from_millis(1));
-        assert!(b.next() >= Duration::from_secs(4));
+        assert!(b.next_delay() >= Duration::from_secs(4));
     }
 }

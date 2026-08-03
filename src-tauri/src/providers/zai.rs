@@ -58,8 +58,22 @@ impl Provider for Zai {
     }
 }
 
+/// A limit as the response describes it, before it has been assigned a meaning.
+///
+/// The endpoint does not state how long any of its windows runs, so the length
+/// cannot be read off the response — it follows from which slot the entry lands
+/// in, and is therefore filled in at that point rather than guessed at here.
+struct RawLimit {
+    name: String,
+    used_percent: f64,
+    resets_at: Option<DateTime<Utc>>,
+}
+
+const FIVE_HOUR_MINUTES: u64 = 5 * 60;
+const WEEK_MINUTES: u64 = 7 * 24 * 60;
+
 fn parse_limits(body: &Value) -> Result<(Option<QuotaWindow>, Option<QuotaWindow>), ProviderError> {
-    let mut found: Vec<(String, QuotaWindow)> = Vec::new();
+    let mut found: Vec<RawLimit> = Vec::new();
     walk(body, "", &mut found);
     if found.is_empty() {
         return Err(ProviderError::Parse(
@@ -68,20 +82,21 @@ fn parse_limits(body: &Value) -> Result<(Option<QuotaWindow>, Option<QuotaWindow
     }
     let mut five_hour = None;
     let mut week = None;
-    for (name, window) in found {
-        let label = name.to_ascii_lowercase();
+    for limit in found {
+        let label = limit.name.to_ascii_lowercase();
+        let window = |minutes| QuotaWindow::new(limit.used_percent, limit.resets_at, minutes);
         if label.contains("week") || label.contains("7day") || label.contains("seven") {
-            week = Some(window);
+            week = Some(window(WEEK_MINUTES));
         } else if label.contains("token") || five_hour.is_none() {
-            five_hour = Some(window);
+            five_hour = Some(window(FIVE_HOUR_MINUTES));
         } else if week.is_none() {
-            week = Some(window);
+            week = Some(window(WEEK_MINUTES));
         }
     }
     Ok((five_hour, week))
 }
 
-fn walk(value: &Value, path: &str, found: &mut Vec<(String, QuotaWindow)>) {
+fn walk(value: &Value, path: &str, found: &mut Vec<RawLimit>) {
     match value {
         Value::Object(map) => {
             let limit = map
@@ -105,11 +120,15 @@ fn walk(value: &Value, path: &str, found: &mut Vec<(String, QuotaWindow)>) {
                     .and_then(Value::as_str)
                     .unwrap_or(path)
                     .to_string();
-                let reset = map
+                let resets_at = map
                     .get("nextResetTime")
                     .or_else(|| map.get("resetTime"))
                     .and_then(parse_reset);
-                found.push((name, QuotaWindow::new(used_percent, reset, 300)));
+                found.push(RawLimit {
+                    name,
+                    used_percent,
+                    resets_at,
+                });
             }
             for (key, child) in map {
                 let next = if path.is_empty() {
@@ -160,5 +179,19 @@ mod tests {
         let (five, week) = parse_limits(&body).unwrap();
         assert_eq!(five.unwrap().used_percent, 22.0);
         assert_eq!(week.unwrap().used_percent, 41.0);
+    }
+
+    /// The response says nothing about how long its windows run, so the length
+    /// has to follow the slot the entry was sorted into. Reporting the weekly
+    /// quota as a five-hour one was simply false.
+    #[test]
+    fn each_window_reports_the_length_of_the_slot_it_landed_in() {
+        let body = serde_json::json!({"data":{"limits":[
+            {"type":"TOKENS_LIMIT","percentage":22},
+            {"type":"WEEK_LIMIT","percentage":41}
+        ]}});
+        let (five, week) = parse_limits(&body).unwrap();
+        assert_eq!(five.unwrap().window_minutes, 300);
+        assert_eq!(week.unwrap().window_minutes, 10_080);
     }
 }

@@ -22,10 +22,31 @@ export function FloatingBar() {
 
   // The bar is dragged by the window manager, so React never sees a drag end.
   // A global mouseup is the only reliable point to ask Rust to snap and save.
+  //
+  // Only a press that landed on the drag region can have started a drag, and
+  // that distinction is load-bearing: unconditionally, every click of Refresh or
+  // Settings rewrote config.json and re-ran the edge snap, which could jump the
+  // window out from under the pointer when the bar was sitting near an edge.
   useEffect(() => {
-    const onUp = () => void api.barDropped();
+    let fromDragRegion = false;
+
+    const onDown = (e: MouseEvent) => {
+      fromDragRegion =
+        e.target instanceof Element &&
+        e.target.closest("[data-tauri-drag-region]") !== null;
+    };
+    const onUp = () => {
+      if (!fromDragRegion) return;
+      fromDragRegion = false;
+      void api.barDropped();
+    };
+
+    window.addEventListener("mousedown", onDown);
     window.addEventListener("mouseup", onUp);
-    return () => window.removeEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("mouseup", onUp);
+    };
   }, []);
 
   const onRefresh = useCallback(async () => {

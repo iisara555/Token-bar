@@ -18,6 +18,7 @@ const providerSeed: Array<
         | "enabled"
         | "hasKey"
         | "needsKey"
+        | "manualEntry"
         | "fingerprint"
         | "options"
         | "authMode"
@@ -117,6 +118,8 @@ const providerSeed: Array<
     caps: { cost: false, tokens: false, balance: false, series: false },
     requiredOptions: [],
     pollSeconds: 3600,
+    needsKey: false,
+    manualEntry: true,
   },
   {
     id: "groq",
@@ -124,6 +127,8 @@ const providerSeed: Array<
     caps: { cost: false, tokens: false, balance: false, series: false },
     requiredOptions: [],
     pollSeconds: 3600,
+    needsKey: false,
+    manualEntry: true,
   },
   {
     id: "mistral",
@@ -131,6 +136,8 @@ const providerSeed: Array<
     caps: { cost: false, tokens: false, balance: false, series: false },
     requiredOptions: [],
     pollSeconds: 3600,
+    needsKey: false,
+    manualEntry: true,
   },
 ];
 
@@ -151,6 +158,7 @@ const mockLinks: Partial<Record<ProviderId, [string, string]>> = {
 const providers: ProviderView[] = providerSeed.map((provider) => ({
   enabled: false,
   needsKey: true,
+  manualEntry: false,
   hasKey: false,
   fingerprint: null,
   authMode: "api_key",
@@ -239,6 +247,7 @@ let view: AppView = {
   hotkey: "Ctrl+Alt+U",
   clickThrough: false,
   compact: false,
+  allowInNotch: false,
   providers,
   snapshots,
   version: "0.1.0-dev",
@@ -311,6 +320,14 @@ export const mockApi = {
     view.windowDays = Math.max(1, Math.min(30, Math.round(days)));
     emitConfig();
   },
+  async setWarnAt(fraction: number) {
+    view.warnAt = Math.max(0.5, Math.min(0.95, fraction));
+    emitConfig();
+  },
+  async setHotkey(accelerator: string) {
+    view.hotkey = accelerator;
+    emitConfig();
+  },
   async setProviderEnabled(provider: ProviderId, enabled: boolean) {
     changeProvider(provider, (item) => {
       item.enabled = enabled;
@@ -348,6 +365,10 @@ export const mockApi = {
   },
   async setCompact(on: boolean) {
     view.compact = on;
+    emitConfig();
+  },
+  async setAllowInNotch(on: boolean) {
+    view.allowInNotch = on;
     emitConfig();
   },
   async isAutostartEnabled() {

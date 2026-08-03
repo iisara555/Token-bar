@@ -43,7 +43,7 @@ pub enum GlassPref {
     Off,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderConfig {
     pub enabled: bool,
@@ -55,16 +55,6 @@ pub struct ProviderConfig {
     /// `manual_spend_usd`. Never credentials.
     #[serde(default)]
     pub options: BTreeMap<String, String>,
-}
-
-impl Default for ProviderConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            auth_mode: AuthMode::default(),
-            options: BTreeMap::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,6 +70,13 @@ pub struct BarConfig {
     pub compact: bool,
     #[serde(default = "yes")]
     pub visible: bool,
+    /// macOS only: let the bar sit in the menu bar strip, beside the camera
+    /// housing, instead of being held below it.
+    ///
+    /// Off by default because the menu bar is the system's space and a utility
+    /// that moves in uninvited is a utility that covers someone's clock.
+    #[serde(default)]
+    pub allow_in_notch: bool,
 }
 
 impl Default for BarConfig {
@@ -89,6 +86,7 @@ impl Default for BarConfig {
             click_through: false,
             compact: false,
             visible: true,
+            allow_in_notch: false,
         }
     }
 }

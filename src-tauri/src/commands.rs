@@ -40,6 +40,9 @@ pub struct ProviderView {
     pub uses_oauth: bool,
     pub oauth_status: Option<crate::oauth::OAuthStatus>,
     pub needs_key: bool,
+    /// Whether this adapter actually reads `manual_spend_usd`. Drives whether
+    /// Settings offers the field at all.
+    pub manual_entry: bool,
     /// Whether a credential is stored. Never the credential.
     pub has_key: bool,
     /// e.g. `sk-ant-admin01-…4f2a`. Safe to render.
@@ -66,6 +69,8 @@ pub struct AppView {
     pub hotkey: String,
     pub click_through: bool,
     pub compact: bool,
+    /// macOS only. Always reported so Settings can show the current state.
+    pub allow_in_notch: bool,
     pub providers: Vec<ProviderView>,
     pub snapshots: Vec<UsageSnapshot>,
     pub version: String,
@@ -93,6 +98,7 @@ pub fn get_app_view<R: Runtime>(
                 uses_oauth: crate::oauth::should_use(id, pc.auth_mode),
                 oauth_status,
                 needs_key: p.needs_key(),
+                manual_entry: p.manual_entry(),
                 has_key: fingerprint.is_some(),
                 fingerprint,
                 caps: p.caps(),
@@ -116,6 +122,7 @@ pub fn get_app_view<R: Runtime>(
         hotkey: cfg.hotkey.clone(),
         click_through: cfg.bar.click_through,
         compact: cfg.bar.compact,
+        allow_in_notch: cfg.bar.allow_in_notch,
         providers,
         snapshots,
         version: app.package_info().version.to_string(),
@@ -168,6 +175,67 @@ pub fn set_window_days<R: Runtime>(
         .update(|c| c.window_days = days)
         .map_err(|e| e.to_string())?;
     state.nudge_all();
+    announce_config(&app);
+    Ok(())
+}
+
+/// Where the bar starts warning, as a fraction of a budget or quota window.
+///
+/// Clamped rather than validated: the useful range is "well before the ceiling"
+/// to "almost at it", and a threshold of 0 would paint the rail amber at rest
+/// while 1.0 would make it indistinguishable from being over.
+#[tauri::command]
+pub fn set_warn_at<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    fraction: f64,
+) -> CmdResult<()> {
+    if !fraction.is_finite() {
+        return Err("warning threshold must be a number".into());
+    }
+    let fraction = fraction.clamp(0.5, 0.95);
+    state
+        .config
+        .update(|c| c.warn_at = fraction)
+        .map_err(|e| e.to_string())?;
+    crate::refresh_tray(&app);
+    announce_config(&app);
+    Ok(())
+}
+
+/// Rebind the show/hide accelerator.
+///
+/// The new binding is proved against the OS before it is written down: an
+/// accelerator already taken by another app fails here, and the user keeps the
+/// shortcut that was working rather than silently losing both.
+#[tauri::command]
+pub fn set_hotkey<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    accelerator: String,
+) -> CmdResult<()> {
+    let accelerator = accelerator.trim().to_string();
+    if accelerator.is_empty() {
+        return Err("shortcut is empty".into());
+    }
+
+    let previous = state.config.get().hotkey;
+    if accelerator == previous {
+        return Ok(());
+    }
+
+    if let Err(e) = crate::register_hotkey(&app, &accelerator, Some(previous.as_str())) {
+        // Put the working shortcut back before reporting the failure.
+        let _ = crate::register_hotkey(&app, &previous, None);
+        return Err(format!(
+            "{accelerator} could not be registered — another app may already use it ({e})"
+        ));
+    }
+
+    state
+        .config
+        .update(|c| c.hotkey = accelerator)
+        .map_err(|e| e.to_string())?;
     announce_config(&app);
     Ok(())
 }
@@ -239,6 +307,12 @@ pub fn set_provider_option<R: Runtime>(
     value: String,
 ) -> CmdResult<()> {
     let id = parse_id(&provider)?;
+    // Options are identifiers and small numbers — team ids, budgets. Anything
+    // beyond that is a mistake or a paste, and config.json is rewritten in full
+    // on every change, so there is no reason to carry it.
+    if key.len() > MAX_OPTION_KEY_LEN || value.len() > MAX_OPTION_VALUE_LEN {
+        return Err("that value is too long for a settings field".into());
+    }
     // Guard against a credential being pasted into a plain-text option field,
     // where it would land in config.json instead of the credential store.
     if looks_like_a_key(&value) {
@@ -262,6 +336,9 @@ pub fn set_provider_option<R: Runtime>(
     announce_config(&app);
     Ok(())
 }
+
+const MAX_OPTION_KEY_LEN: usize = 64;
+const MAX_OPTION_VALUE_LEN: usize = 256;
 
 fn looks_like_a_key(v: &str) -> bool {
     let v = v.trim();
@@ -287,11 +364,16 @@ pub fn save_provider_key<R: Runtime>(
     if key.is_empty() {
         return Err("key is empty".into());
     }
+    // Derive the label *before* storing. Anything that can go wrong with the
+    // key's own text should go wrong while the credential store is still
+    // untouched, rather than leaving a stored key the app then trips over on
+    // every launch.
+    let fingerprint = crate::secrets::fingerprint(key);
     crate::secrets::set(id, key).map_err(|e| e.to_string())?;
     // A new key deserves an immediate retry even if the old one was rejected.
     state.nudge(id);
     announce_config(&app);
-    Ok(crate::secrets::fingerprint(key))
+    Ok(fingerprint)
 }
 
 #[tauri::command]
@@ -379,6 +461,27 @@ pub fn set_compact<R: Runtime>(
         .config
         .update(|c| c.bar.compact = on)
         .map_err(|e| e.to_string())?;
+    announce_config(&app);
+    Ok(())
+}
+
+/// macOS only: allow the bar into the menu bar strip beside the camera housing.
+///
+/// Re-runs placement immediately, so turning it off pulls a bar that is up there
+/// back down rather than leaving it stranded over the menu bar.
+#[tauri::command]
+pub fn set_allow_in_notch<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    on: bool,
+) -> CmdResult<()> {
+    state
+        .config
+        .update(|c| c.bar.allow_in_notch = on)
+        .map_err(|e| e.to_string())?;
+    if let Some(w) = app.get_webview_window(BAR) {
+        floating::reapply_placement(&w);
+    }
     announce_config(&app);
     Ok(())
 }

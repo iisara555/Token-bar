@@ -55,23 +55,29 @@ pub fn delete(id: ProviderId) -> Result<(), SecretError> {
 /// A safe, stable label for a stored key: keeps the recognisable prefix and the
 /// last four characters, drops everything in between. This is what the settings
 /// window displays.
+///
+/// Everything here counts *characters*, not bytes. A key is normally ASCII, but
+/// this runs on whatever the user pasted, and slicing a stray multi-byte
+/// character down the middle is a panic — which, with `panic = "abort"`, takes
+/// the whole app with it every time the settings window is opened.
 pub fn fingerprint(key: &str) -> String {
-    let key = key.trim();
-    if key.len() <= 10 {
-        return "•".repeat(key.len().max(4));
+    let chars: Vec<char> = key.trim().chars().collect();
+    if chars.len() <= 10 {
+        return "•".repeat(chars.len().max(4));
     }
-    let prefix_len = key
-        .char_indices()
-        .filter(|(_, c)| *c == '-' || *c == '_')
+    // Keep everything up to the last `-` or `_` inside the first 16 characters,
+    // so `sk-ant-admin01-` survives as a recognisable prefix.
+    let prefix_len = chars
+        .iter()
+        .take(16)
+        .enumerate()
+        .filter(|(_, c)| **c == '-' || **c == '_')
         .map(|(i, _)| i + 1)
-        .take_while(|i| *i <= 16)
-        .last()
+        .next_back()
         .unwrap_or(3);
-    format!(
-        "{}…{}",
-        &key[..prefix_len.min(key.len())],
-        &key[key.len() - 4..]
-    )
+    let prefix: String = chars[..prefix_len].iter().collect();
+    let tail: String = chars[chars.len() - 4..].iter().collect();
+    format!("{prefix}…{tail}")
 }
 
 /// Fingerprint of whatever is currently stored, if anything.
@@ -106,5 +112,26 @@ mod tests {
     fn short_input_is_fully_masked() {
         assert_eq!(fingerprint("abc"), "••••");
         assert!(!fingerprint("abcdefghij").contains('a'));
+    }
+
+    /// A key is meant to be ASCII, but this is fed whatever was pasted into the
+    /// field. Slicing on a byte index used to abort the process here — and
+    /// because the key is stored before it is fingerprinted, it aborted again on
+    /// every subsequent launch.
+    #[test]
+    fn a_multibyte_key_is_masked_rather_than_panicking() {
+        let secret = "sk-ant-admin01-ทดสอบรหัสผ่านลับ";
+        let fp = fingerprint(secret);
+        assert!(fp.starts_with("sk-ant-admin01-"), "{fp}");
+        assert!(!fp.contains("ทดสอบ"), "raw key survived: {fp}");
+
+        // A prefixless multi-byte key exercises the other slice boundary.
+        assert!(fingerprint("パスワードパスワードパスワード").contains('…'));
+    }
+
+    #[test]
+    fn short_multibyte_input_is_masked_by_character_count() {
+        // Three characters, nine bytes. The mask counts what the user sees.
+        assert_eq!(fingerprint("パスワ"), "••••");
     }
 }

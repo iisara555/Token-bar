@@ -34,7 +34,6 @@ reqwest = { version = "0.12", default-features = false, features = [
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
-anyhow = "1"
 rand = "0.8"
 secrecy = "0.10"
 # The backend is chosen per target below. Enabling `windows-native` on a Mac
@@ -74,11 +73,6 @@ tauri-plugin-single-instance = "2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }
-
-[features]
-default = []
-# Serves every adapter from checked-in fixtures so the whole UI runs with zero real keys.
-mock = []
 
 [profile.release]
 codegen-units = 1

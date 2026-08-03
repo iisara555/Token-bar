@@ -33,6 +33,10 @@ impl Provider for Mistral {
         false
     }
 
+    fn manual_entry(&self) -> bool {
+        true
+    }
+
     async fn fetch(&self, ctx: &FetchCtx) -> Result<UsageSnapshot, ProviderError> {
         Ok(manual::snapshot(
             ProviderId::Mistral,
