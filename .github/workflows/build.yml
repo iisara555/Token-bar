@@ -20,6 +20,10 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    # Read in the `if` of the two build steps below. The secrets context is not
+    # available there, but the env context is.
+    env:
+      HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -65,22 +69,36 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
-      - name: Build the installers
+      # Two steps rather than one with conditional env, because the bundler
+      # decides to import a certificate from the mere *presence* of
+      # APPLE_CERTIFICATE. Passing it through empty makes `security import`
+      # fail and takes the whole build with it, and there is no way to leave an
+      # env var unset from an expression.
+      - name: Build the installers (Developer ID)
+        if: env.HAS_APPLE_CERT == 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # `-` is the ad-hoc identity. An unsigned bundle will not launch at all
-          # on Apple silicon — the loader kills it before Gatekeeper ever gets to
-          # show a prompt — so signing with *something* is required, not
-          # cosmetic. Setting the APPLE_* secrets below switches this to a real
-          # Developer ID and turns on notarisation; without them the build still
-          # produces a working .dmg that warns on first open.
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          args: ${{ matrix.args }}
+
+      - name: Build the installers (ad-hoc signature)
+        if: env.HAS_APPLE_CERT != 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # `-` is the ad-hoc identity, and it is load-bearing rather than
+          # cosmetic: an entirely unsigned bundle is killed by the loader on
+          # Apple silicon before Gatekeeper ever gets to show a prompt. Add the
+          # APPLE_* secrets and the step above takes over, signing with a real
+          # Developer ID and notarising.
+          APPLE_SIGNING_IDENTITY: "-"
         with:
           args: ${{ matrix.args }}
 

@@ -43,7 +43,7 @@ pub enum GlassPref {
     Off,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderConfig {
     pub enabled: bool,
@@ -55,16 +55,6 @@ pub struct ProviderConfig {
     /// `manual_spend_usd`. Never credentials.
     #[serde(default)]
     pub options: BTreeMap<String, String>,
-}
-
-impl Default for ProviderConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            auth_mode: AuthMode::default(),
-            options: BTreeMap::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
