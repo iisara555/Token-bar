@@ -1,18 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="bg" x1="160" y1="112" x2="864" y2="912" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#202633"/>
-      <stop offset="1" stop-color="#0d1118"/>
-    </linearGradient>
-    <linearGradient id="bar" x1="242" y1="405" x2="786" y2="619" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#ffffff" stop-opacity=".96"/>
-      <stop offset="1" stop-color="#dfe5ef" stop-opacity=".82"/>
-    </linearGradient>
-  </defs>
-  <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#bg)"/>
-  <rect x="176" y="352" width="672" height="320" rx="160" fill="#ffffff" fill-opacity=".08" stroke="#ffffff" stroke-opacity=".15" stroke-width="12"/>
-  <circle cx="314" cy="512" r="62" fill="#d97757"/>
-  <circle cx="478" cy="512" r="62" fill="#10a37f"/>
-  <circle cx="642" cy="512" r="62" fill="#4c8dff"/>
-  <rect x="724" y="480" width="62" height="64" rx="31" fill="url(#bar)"/>
+  <!-- The Quoken mark: a Q set in the same dot-matrix the bar uses for every
+       reading, so the icon in the tray is the same instrument as the panel it
+       opens rather than a logo drawn alongside one.
+
+       A 5x6 lattice on a 112px pitch. The tail is the one lit cell that leaves
+       the letter, carried on the diagonal and in the palette's own orange (the
+       auth-api token, #ff6a2a): the single point of colour, in the one place
+       the shape is already asking the eye to go. -->
+  <rect x="64" y="64" width="896" height="896" rx="224" fill="#000000"/>
+
+  <g fill="#ffffff">
+    <!-- top -->
+    <circle cx="400" cy="200" r="48"/>
+    <circle cx="512" cy="200" r="48"/>
+    <circle cx="624" cy="200" r="48"/>
+    <!-- sides -->
+    <circle cx="288" cy="312" r="48"/>
+    <circle cx="736" cy="312" r="48"/>
+    <circle cx="288" cy="424" r="48"/>
+    <circle cx="736" cy="424" r="48"/>
+    <circle cx="288" cy="536" r="48"/>
+    <circle cx="736" cy="536" r="48"/>
+    <!-- the row carrying the counter's inner stroke -->
+    <circle cx="288" cy="648" r="48"/>
+    <circle cx="512" cy="648" r="48"/>
+    <circle cx="736" cy="648" r="48"/>
+    <!-- bottom -->
+    <circle cx="400" cy="760" r="48"/>
+    <circle cx="512" cy="760" r="48"/>
+    <circle cx="624" cy="760" r="48"/>
+  </g>
+
+  <!-- the tail -->
+  <circle cx="736" cy="872" r="48" fill="#ff6a2a"/>
 </svg>
