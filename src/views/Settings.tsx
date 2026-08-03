@@ -2,12 +2,10 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useUsage } from "../state/useUsage";
 import {
-  ACCENT,
   type AuthMode,
   type GlassPref,
   type ProviderId,
   type ProviderView,
-  type ThemeMode,
 } from "../types";
 import { hotkeyLabel } from "../format";
 import { CloseIcon, KeyIcon } from "../components/Icons";
@@ -92,27 +90,6 @@ export function Settings() {
             <div className="card">
               <div className="field">
                 <div>
-                  <div className="field-label">Theme</div>
-                  <div className="field-hint">
-                    System follows {osName} light/dark automatically.
-                  </div>
-                </div>
-                <Segmented<ThemeMode>
-                  value={view.theme}
-                  options={[
-                    ["system", "System"],
-                    ["light", "Light"],
-                    ["dark", "Dark"],
-                  ]}
-                  onChange={async (v) => {
-                    await api.setTheme(v);
-                    await reload();
-                  }}
-                />
-              </div>
-
-              <div className="field">
-                <div>
                   <div className="field-label">Glass</div>
                   <div className="field-hint">
                     Currently rendering in <strong>{view.glassMode}</strong> mode.
@@ -159,7 +136,8 @@ export function Settings() {
                 <div>
                   <div className="field-label">Compact bar</div>
                   <div className="field-hint">
-                    Keep provider marks and the total while hiding secondary detail.
+                    Shorten the meters and drop the wordmark and reset times. Every
+                    reading stays — only the room around them goes.
                   </div>
                 </div>
                 <Switch
@@ -299,7 +277,7 @@ function ProviderRow({
   return (
     <>
       <div className="provider-row">
-        <span className="chip-mark" style={{ ["--accent" as string]: ACCENT[provider.id] }}>
+        <span className="chip-mark">
           <ProviderLogo provider={provider.id} />
         </span>
         <button

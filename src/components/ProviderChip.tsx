@@ -1,12 +1,8 @@
-import {
-  ACCENT,
-  type ProviderView,
-  type QuotaWindow,
-  type UsageSnapshot,
-} from "../types";
 import { useEffect, useState } from "react";
-import { money, resetIn, resetInShort, statusLabel, tokens, totalTokens } from "../format";
-import { Sparkline } from "./Sparkline";
+import { statusLabel } from "../format";
+import { readingsFor } from "../readings";
+import type { ProviderView, UsageSnapshot } from "../types";
+import { Meter } from "./Meter";
 import { ProviderLogo } from "./ProviderLogo";
 
 interface ProviderChipProps {
@@ -22,46 +18,17 @@ export function ProviderChip({
   expanded,
   onToggle,
 }: ProviderChipProps) {
-  const [, refreshCountdown] = useState(0);
+  // Reset countdowns are rendered text, not live elements, so nothing redraws
+  // them on its own. A minute is the resolution they are written at.
+  const [, tick] = useState(0);
   useEffect(() => {
-    const timer = window.setInterval(() => refreshCountdown((value) => value + 1), 60_000);
+    const timer = window.setInterval(() => tick((n) => n + 1), 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const accent = ACCENT[provider.id];
   const status = snapshot?.status ?? "not_configured";
-  const fiveHour = snapshot?.limits?.fiveHour;
-  const week = snapshot?.limits?.week;
-  const hasLimits = Boolean(fiveHour || week);
-
-  // Cost is the headline where a provider reports it. Where it does not
-  // (DeepSeek, until two balance readings exist) the remaining balance is the
-  // honest thing to show instead of a fabricated zero.
-  const primary =
-    snapshot?.costCents !== null && snapshot?.costCents !== undefined
-      ? money(snapshot.costCents)
-      : snapshot?.balanceCents !== null && snapshot?.balanceCents !== undefined
-        ? money(snapshot.balanceCents)
-        : "—";
-
-  const primaryIsBalance =
-    (snapshot?.costCents === null || snapshot?.costCents === undefined) &&
-    snapshot?.balanceCents !== null &&
-    snapshot?.balanceCents !== undefined;
-
-  const tokenTotal = snapshot ? totalTokens(snapshot.tokens) : 0;
-  const sub =
-    status === "ok" || status === "stale"
-      ? primaryIsBalance
-        ? "left"
-        : tokenTotal > 0
-          ? `${tokens(tokenTotal)} tok`
-          : provider.name
-      : statusLabel(status);
-
-  const series = (snapshot?.series ?? []).map((b) =>
-    b.costCents !== null ? b.costCents : totalTokens(b.tokens),
-  );
+  const readings = readingsFor(provider, snapshot);
+  const needsSignIn = provider.usesOauth && status === "auth_error";
 
   return (
     <button
@@ -69,53 +36,31 @@ export function ProviderChip({
       className="chip"
       aria-expanded={expanded}
       onClick={onToggle}
-      title={`${provider.name} — ${provider.usesOauth && status === "auth_error" ? "Sign in" : statusLabel(status)}`}
+      title={`${provider.name} — ${needsSignIn ? "Sign in" : statusLabel(status)}`}
     >
-      <span
-        className="chip-mark"
-        data-status={status}
-        style={{ ["--accent" as string]: accent }}
-      >
+      <span className="chip-mark" data-status={status}>
         <ProviderLogo provider={provider.id} />
       </span>
 
-      {hasLimits ? (
-        <span className="quota-pair">
-          <QuotaStat label="5H" window={fiveHour} />
-          <QuotaStat label="WEEK" window={week} />
-        </span>
-      ) : (
-        <span className="chip-body">
-          <span className="chip-value num">{primary}</span>
-          <span className="chip-sub">
-            {provider.usesOauth && status === "auth_error" ? "Sign in" : sub}
-          </span>
-        </span>
-      )}
-
-      {!hasLimits && provider.caps.series && series.length > 1 && (
-        <Sparkline
-          values={series}
-          color={accent}
-          label={`${provider.name} daily trend`}
-        />
-      )}
+      <span className="chip-meters">
+        {readings.length === 0 ? (
+          // Nothing to plot. Say why rather than drawing an empty instrument,
+          // which would read as "zero left" instead of "no data".
+          <span className="chip-status">{needsSignIn ? "Sign in" : statusLabel(status)}</span>
+        ) : (
+          readings.map((r) => (
+            <Meter
+              key={r.key}
+              label={r.shortLabel}
+              percent={r.percent}
+              value={r.value}
+              caption={r.shortCaption}
+              ramp={r.ramp}
+              description={r.description}
+            />
+          ))
+        )}
+      </span>
     </button>
-  );
-}
-
-function QuotaStat({ label, window }: { label: string; window?: QuotaWindow | null }) {
-  const remaining = window ? Math.round(window.remainingPercent) : null;
-  const tone = remaining === null ? "neutral" : remaining <= 20 ? "danger" : remaining <= 40 ? "warn" : "ok";
-  return (
-    <span
-      className="quota-mini"
-      data-tone={tone}
-      title={`${label}: ${remaining === null ? "unknown" : `${remaining}% left`} · ${resetIn(window?.resetsAt)}`}
-    >
-      <span className="quota-mini-value num">{remaining === null ? "—" : `${remaining}%`}</span>
-      <span className="quota-mini-label">{label} LEFT</span>
-      <span className="quota-mini-reset">RESET {resetInShort(window?.resetsAt)}</span>
-    </span>
   );
 }

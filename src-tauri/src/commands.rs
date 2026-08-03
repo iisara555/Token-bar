@@ -8,7 +8,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalSize, Runtime, State};
 
-use crate::config::{AuthMode, GlassPref, ThemeMode};
+use crate::config::{AuthMode, GlassPref};
 use crate::providers::{provider_for, Caps, ProviderId, UsageSnapshot};
 use crate::state::AppState;
 use crate::windows::{floating, BAR, SETTINGS};
@@ -58,7 +58,6 @@ pub struct ProviderView {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppView {
-    pub theme: ThemeMode,
     pub glass: GlassPref,
     pub glass_mode: crate::vibrancy::GlassMode,
     pub window_days: i64,
@@ -108,7 +107,6 @@ pub fn get_app_view<R: Runtime>(
     let snapshots = state.store.all_latest().map_err(|e| e.to_string())?;
 
     Ok(AppView {
-        theme: cfg.theme,
         glass: cfg.glass,
         glass_mode: crate::current_glass_mode(&app),
         window_days: cfg.window_days,
@@ -125,21 +123,6 @@ pub fn get_app_view<R: Runtime>(
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub fn set_theme<R: Runtime>(
-    app: AppHandle<R>,
-    state: State<'_, AppState>,
-    theme: ThemeMode,
-) -> CmdResult<()> {
-    state
-        .config
-        .update(|c| c.theme = theme)
-        .map_err(|e| e.to_string())?;
-    crate::reapply_glass(&app);
-    announce_config(&app);
-    Ok(())
-}
 
 #[tauri::command]
 pub fn set_glass<R: Runtime>(

@@ -23,15 +23,6 @@ pub enum AuthMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
-pub enum ThemeMode {
-    #[default]
-    System,
-    Light,
-    Dark,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
 pub enum GlassPref {
     /// Follow the OS: native backdrop when transparency effects are on.
     #[default]
@@ -109,8 +100,6 @@ fn default_window_days() -> i64 {
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     #[serde(default)]
-    pub theme: ThemeMode,
-    #[serde(default)]
     pub glass: GlassPref,
     #[serde(default)]
     pub providers: BTreeMap<ProviderId, ProviderConfig>,
@@ -144,7 +133,6 @@ impl Default for Config {
             );
         }
         Self {
-            theme: ThemeMode::default(),
             glass: GlassPref::default(),
             providers,
             bar: BarConfig::default(),
@@ -266,10 +254,13 @@ mod tests {
 
     #[test]
     fn unknown_fields_and_missing_fields_both_round_trip() {
-        // Forward compatible: a config written by a newer build still loads.
+        // Both directions of compatibility in one case: `theme` is a field this
+        // build no longer has, written by every build before the app went
+        // black-only, and `futureSetting` stands in for one a later build might
+        // add. Neither may stop a config from loading — a user who downgrades
+        // should not lose their budgets to a stray key.
         let raw = r#"{"theme":"dark","futureSetting":42}"#;
         let cfg: Config = serde_json::from_str(raw).expect("loads");
-        assert_eq!(cfg.theme, ThemeMode::Dark);
         assert_eq!(cfg.hotkey, "CmdOrControl+Alt+U");
         assert_eq!(cfg.window_days, 30);
     }
@@ -282,10 +273,10 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         let store = ConfigStore::load(&path);
-        store.update(|c| c.theme = ThemeMode::Light).unwrap();
+        store.update(|c| c.window_days = 7).unwrap();
 
         let reloaded = ConfigStore::load(&path);
-        assert_eq!(reloaded.get().theme, ThemeMode::Light);
+        assert_eq!(reloaded.get().window_days, 7);
         let _ = std::fs::remove_file(&path);
     }
 }

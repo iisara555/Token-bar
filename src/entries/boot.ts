@@ -1,17 +1,16 @@
 /**
- * Set theme and platform before React mounts.
+ * Set the surface attributes before React mounts.
  *
- * Without this the first paint happens with no `data-theme` at all, which on a
- * transparent window shows as a white flash over whatever is behind it. The
- * stored preference arrives a tick later and corrects this if it differs.
+ * The app is black — there is no light variant to resolve and nothing to read
+ * from the OS. This still has to run before first paint: without `data-glass`
+ * the surface renders with no fill at all, which on a transparent window is a
+ * flash of whatever is behind it.
  *
- * `data-os` has to land in the same pass for the same reason: the compositor
- * workarounds and the scrollbar treatment keyed off it are structural, and
- * applying them one frame late is a visible reflow on every window open.
+ * `data-os` lands in the same pass because the compositor workarounds and the
+ * scrollbar treatment keyed off it are structural, and applying them one frame
+ * late is a visible reflow on every window open.
  */
 export function bootTheme() {
-  const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  document.documentElement.dataset.theme = dark ? "dark" : "light";
   document.documentElement.dataset.glass ??= "css";
   document.documentElement.dataset.os ??= detectOs();
 }

@@ -1,32 +1,53 @@
 /* ---------------------------------------------------------------------------
    Token Bar design tokens.
 
-   Four surface modes, set as `data-glass` on <html> from what the native side
+   The surface is black. Not "dark theme" black — the one colour the whole app
+   is built on, with meaning carried entirely by two gradient ramps and a
+   dot-matrix numeral. There is no light variant: the ramps are calibrated to
+   emerge out of white on black, and inverting that puts the pale end of every
+   meter on top of a pale background, which is the one thing this design cannot
+   survive.
+
+   Surface modes, set as `data-glass` on <html> from what the native side
    actually managed to apply:
 
-     native   — DWM is painting Mica/Acrylic behind the window. CSS adds only the
-                tint, the highlight ring and the noise, so the blur is not paid
-                for twice.
-     vibrancy — AppKit is painting an NSVisualEffectView behind the window. Same
-                deal as `native`, but the material already carries its own tint,
-                so CSS backs its own fill off further still.
-     css      — no native backdrop; CSS does the whole blur itself.
+     native   — DWM is painting Mica/Acrylic behind the window.
+     vibrancy — AppKit is painting an NSVisualEffectView behind the window.
+     css      — no native backdrop; CSS does the blur itself.
      solid    — opaque. Either the user asked for it, or the OS has transparency
                 effects switched off, in which case forcing translucency would
                 override an accessibility preference.
 
-   Theme is `data-theme` on <html>: light or dark, resolved from the OS unless
-   overridden in settings. Platform is `data-os`: macos, windows or linux — it
-   exists for the handful of places where the right answer genuinely differs by
-   platform (system font, scrollbars, compositor workarounds), never as a way to
-   maintain two separate designs.
+   All four land on something that reads as black. The backdrop is worth keeping
+   anyway: at 6% transparency the desktop behind barely registers as colour, but
+   it is the difference between a window that sits on the screen and a black
+   rectangle pasted over it.
+
+   Platform is `data-os`: macos, windows or linux — for the handful of places
+   where the right answer genuinely differs by platform (system font,
+   scrollbars, compositor workarounds), never as a way to maintain two designs.
 --------------------------------------------------------------------------- */
 
+/* The numerals. A dot-matrix face turns every reading into a small array of
+   lit cells, which is what makes a percentage on this bar read as an instrument
+   rather than as text. Subsetted to latin and shipped in-repo — the app's CSP
+   allows `font-src 'self' data:` and nothing else, so a webfont CDN would
+   simply fail to load and silently fall back. */
+@font-face {
+  font-family: "Bitcount Prop Single";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  src: url("../assets/fonts/BitcountPropSingle-latin.woff2") format("woff2");
+}
+
 :root {
-  --radius-pill: 22px;
-  --radius-card: 16px;
-  --radius-chip: 11px;
-  --radius-sm: 8px;
+  color-scheme: dark;
+
+  --radius-pill: 999px;
+  --radius-card: 28px;
+  --radius-chip: 12px;
+  --radius-sm: 10px;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -40,222 +61,111 @@
   --dur: 180ms;
   --dur-slow: 280ms;
 
-  /* Type scale.
-
-     Every size in the app comes from this ladder. The previous ad-hoc mix ran
-     8, 9, 10, 10.5, 11, 11.5, 12, 12.5, 13, 14, 15px — eleven sizes doing the
-     work of six, several of them below the 11px floor Apple's HIG sets for
-     legible text at any weight. The floor here is --text-2xs at 10px, used only
-     for all-caps micro-labels where the letterforms are simple and tracked out;
-     anything that has to be read as a word starts at --text-xs. */
+  /* Type scale. The floor is --text-2xs at 10px, used only for tracked-out
+     micro-labels; anything read as a word starts at --text-xs. */
   --text-2xs: 10px;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
-  --text-md: 14px;
-  --text-lg: 15px;
+  --text-md: 15px;
+  --text-lg: 18px;
   --text-xl: 22px;
-  --text-2xl: 28px;
+  --text-2xl: 30px;
 
-  /* Weights. macOS renders SF at a lighter apparent weight than Segoe on
-     Windows, so semantic names keep the two platforms visually matched rather
-     than numerically identical. */
   --weight-regular: 400;
   --weight-medium: 510;
   --weight-semibold: 600;
   --weight-bold: 700;
 
-  /* Optical tracking: tighter as type grows, looser for small all-caps. */
   --track-tight: -0.02em;
   --track-snug: -0.01em;
   --track-caps: 0.06em;
 
-  /* system-ui first resolves to SF Pro on macOS and Segoe UI Variable on
-     Windows 11 without either having to be named. The explicit families behind
-     it are the fallbacks for older releases of each. */
+  /* system-ui resolves to SF Pro on macOS and Segoe UI Variable on Windows 11
+     without either being named. The families behind it are the older fallbacks.
+     Labels and prose only — every numeral goes through --font-num. */
   --font:
     system-ui, -apple-system, "SF Pro Text", "Segoe UI Variable Display",
     "Segoe UI", sans-serif;
-  /* Tabular figures stop the money column twitching as digits change. */
-  --font-num:
-    system-ui, -apple-system, "SF Pro Text", "Segoe UI Variable Text",
-    "Segoe UI", sans-serif;
+  /* Readings. The fallback keeps tabular figures so a column of digits does not
+     start twitching if the webfont is ever unavailable. */
+  --font-num: "Bitcount Prop Single", ui-monospace, "SF Mono", Consolas, monospace;
 
   --blur: 24px;
-  --sat: 180%;
+  --sat: 140%;
 
-  /* Provider accents. Brand hue is kept where it is distinctive (Anthropic,
-     OpenAI, Mistral) and traded for separation where two brands would collide
-     as adjacent chips. The accent is a secondary cue — every chip also carries
-     its monogram, so this never has to carry meaning alone. */
-  --p-anthropic: #d97757;
-  --p-openai: #10a37f;
-  --p-kimi: #5d6bff;
-  --p-zai: #5b79ff;
-  --p-minimax: #f59e0b;
-  --p-gemini: #4c8dff;
-  --p-deepseek: #7c5cff;
-  --p-xai: #98a0ac;
-  --p-openrouter: #e0619a;
-  --p-groq: #c0ca33;
-  --p-mistral: #ffa940;
+  /* ------------------------------- surface ------------------------------- */
 
-  --ok: #2ea36b;
-  --warn: #e8a33d;
-  --danger: #e5534b;
+  --text: #ffffff;
+  --text-dim: rgba(255, 255, 255, 0.66);
+  /* 0.55 lands at ~5.3:1 on black. Anything quieter fails at the sizes the
+     reset captions actually use. */
+  --text-faint: rgba(255, 255, 255, 0.55);
 
-  /* ------------------------- guardian status ramp ------------------------- */
-  /* One continuous sweep from white at rest to a saturated orange under
-     pressure. The stops are placed by perceived lightness, not by even hue
-     steps: an even hue walk from white to #f26a0a banks hard through pale
-     yellow around the third of the way and reads as two separate ribbons that
-     happen to touch. These six stops keep lightness falling at a constant rate,
-     which is what makes the rail read as a single object.
-
-     Orange is the whole vocabulary here on purpose. The rail is an ambient
-     cue seen out of the corner of an eye all day, and a rail that changes hue
-     to signal state would be using colour as the only carrier of meaning. It
-     changes *length* instead, and the colour rides along with it. */
-  --guard-00: #ffffff;
-  --guard-20: #fff1dc;
-  --guard-40: #ffdcae;
-  --guard-60: #ffb761;
-  --guard-80: #ff8c2b;
-  --guard-100: #f26a0a;
-
-  /* The rail paints this full ramp across the *track*, then reveals only as
-     much of it as the current load earns. So the leading edge's colour is the
-     reading: pale at 20%, deep orange at 100%. A gradient rescaled to the fill
-     would end in the same orange at every value and say nothing. */
-  --guard-ramp: linear-gradient(
-    90deg,
-    var(--guard-00) 0%,
-    var(--guard-20) 20%,
-    var(--guard-40) 40%,
-    var(--guard-60) 60%,
-    var(--guard-80) 80%,
-    var(--guard-100) 100%
-  );
-}
-
-/* --------------------------------- light --------------------------------- */
-
-:root[data-theme="light"] {
-  --text: #14161a;
-  --text-dim: #59616e;
-  /* Was #8d95a1, which measured 2.6:1 against the light glass fill — under the
-     3:1 floor for large text, let alone the 4.5:1 one this is actually used at.
-     #6b7280 clears 4.6:1 and still reads as the quietest step in the ramp. */
-  --text-faint: #6b7280;
-
-  --glass-fill: rgba(255, 255, 255, 0.62);
-  --glass-fill-strong: rgba(255, 255, 255, 0.82);
-  --glass-border: rgba(16, 20, 28, 0.09);
-  --glass-ring: rgba(255, 255, 255, 0.85);
-  --glass-sheen: rgba(255, 255, 255, 0.4);
-
-  --layer: rgba(255, 255, 255, 0.55);
-  --layer-hover: rgba(255, 255, 255, 0.85);
-  --hairline: rgba(16, 20, 28, 0.08);
-
-  --shadow:
-    0 10px 34px rgba(18, 22, 30, 0.14),
-    0 2px 6px rgba(18, 22, 30, 0.08);
-  --shadow-sm: 0 2px 8px rgba(18, 22, 30, 0.1);
-
-  --track: rgba(16, 20, 28, 0.08);
-
-  /* The unfilled part of the guardian rail. Darker than the surface so an empty
-     rail still reads as a rail — a track that vanishes at zero would make the
-     bar look broken rather than calm. */
-  --guard-track: rgba(16, 20, 28, 0.14);
-  /* White on white needs an edge. A hairline under the fill separates the pale
-     end of the ramp from the glass without tinting it. Rendered at 2x against a
-     light desktop the first 25% of the ramp was disappearing into the track
-     entirely, which is the one part of the range the rail spends most of its
-     life in. */
-  --guard-edge: rgba(16, 20, 28, 0.26);
-}
-
-/* ---------------------------------- dark ---------------------------------- */
-
-:root[data-theme="dark"] {
-  --text: #eef1f6;
-  --text-dim: #c8d0da;
-  --text-faint: #b5bfcc;
-
-  --glass-fill: rgba(26, 29, 35, 0.78);
-  --glass-fill-strong: rgba(26, 29, 35, 0.92);
+  --glass-fill: rgba(0, 0, 0, 0.94);
+  --glass-fill-strong: rgba(0, 0, 0, 0.985);
   --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-ring: rgba(255, 255, 255, 0.16);
-  --glass-sheen: rgba(255, 255, 255, 0.08);
+  --glass-ring: rgba(255, 255, 255, 0.07);
+  --glass-sheen: rgba(255, 255, 255, 0.045);
 
-  --layer: rgba(255, 255, 255, 0.05);
+  --layer: rgba(255, 255, 255, 0.055);
   --layer-hover: rgba(255, 255, 255, 0.1);
-  --hairline: rgba(255, 255, 255, 0.09);
+  --hairline: rgba(255, 255, 255, 0.12);
 
   --shadow:
-    0 14px 40px rgba(0, 0, 0, 0.5),
-    0 2px 6px rgba(0, 0, 0, 0.4);
-  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.4);
+    0 18px 44px rgba(0, 0, 0, 0.66),
+    0 2px 8px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.45);
 
-  --track: rgba(255, 255, 255, 0.09);
+  --track: rgba(255, 255, 255, 0.17);
 
-  --guard-track: rgba(255, 255, 255, 0.12);
-  /* On dark glass the pale end of the ramp already separates itself; the edge
-     would only add a rim of grime, so it goes transparent. */
-  --guard-edge: transparent;
-}
+  /* ------------------------------- meters -------------------------------- */
+  /* Two ramps, and only two. Warm is anything that burns down against a short
+     clock — the 5-hour window, spend, a credit balance. Cool is the long
+     horizon: the weekly window. Which ramp a meter uses is therefore a
+     statement about *what kind of limit it is*, not about how full it is, so
+     the two never swap and a glance can tell them apart before reading either.
 
-/* DWM already contributes a dark material behind native glass. Keep that mode
-   airier while the CSS-only fallback carries enough tint for text contrast on
-   a bright desktop. */
-:root[data-theme="dark"][data-glass="native"] {
-  --glass-fill: rgba(26, 29, 35, 0.56);
-  --glass-fill-strong: rgba(26, 29, 35, 0.84);
-}
+     Both start at pure white. On black that is the brightest the screen can
+     go, which puts the leading edge of an almost-empty meter at maximum
+     contrast — the reading nobody should have to hunt for. */
+  --ramp-warm: linear-gradient(
+    90deg,
+    #ffffff 0%,
+    #ffe7a8 22%,
+    #ffc53d 46%,
+    #ff8f1f 72%,
+    #f23e1e 100%
+  );
+  --ramp-cool: linear-gradient(
+    90deg,
+    #ffffff 0%,
+    #bdeaea 20%,
+    #45b3c6 45%,
+    #3a63cb 72%,
+    #7c2fc6 100%
+  );
 
-/* -------------------------------- vibrancy -------------------------------- */
-/* AppKit's NSVisualEffectView is doing the work. Its materials are already
-   tinted and already adapt to the desktop behind them, so CSS contributes less
-   here than under any other mode — enough fill to hold text contrast when a
-   white window slides under the bar, and nothing more. Tinting on top of a
-   macOS material is the single fastest way to make a Mac app look like a port
-   of a Windows one. */
-:root[data-glass="vibrancy"][data-theme="light"] {
-  --glass-fill: rgba(255, 255, 255, 0.28);
-  --glass-fill-strong: rgba(255, 255, 255, 0.6);
-  --glass-sheen: rgba(255, 255, 255, 0.26);
-}
+  --meter-track: rgba(255, 255, 255, 0.18);
 
-:root[data-glass="vibrancy"][data-theme="dark"] {
-  --glass-fill: rgba(26, 29, 35, 0.34);
-  --glass-fill-strong: rgba(26, 29, 35, 0.68);
-  --glass-sheen: rgba(255, 255, 255, 0.06);
+  /* Auth provenance. Cyan for a session the user already signed into, orange
+     for a key they pasted in — two different trust stories, worth telling
+     apart at a glance in the card header. */
+  --auth-oauth: #3fd8e8;
+  --auth-api: #ff6a2a;
+
+  --ok: #35d18a;
+  --warn: #ffb020;
+  --danger: #ff5c4d;
 }
 
 /* --------------------------------- solid ---------------------------------- */
 /* Opaque fallback. Contrast goes up, not down, when the blur is removed. */
 
-:root[data-glass="solid"][data-theme="light"] {
-  --glass-fill: #f6f7f9;
-  --glass-fill-strong: #ffffff;
+:root[data-glass="solid"] {
+  --glass-fill: #000000;
+  --glass-fill-strong: #0a0a0a;
   --glass-sheen: transparent;
-  --glass-ring: rgba(255, 255, 255, 0.9);
-  --layer: rgba(16, 20, 28, 0.04);
-}
-
-:root[data-glass="solid"][data-theme="dark"] {
-  --glass-fill: #1b1e24;
-  --glass-fill-strong: #22262d;
-  --glass-sheen: transparent;
-  --glass-ring: rgba(255, 255, 255, 0.08);
-  --layer: rgba(255, 255, 255, 0.06);
-}
-
-:root[data-glass="solid"][data-theme="light"],
-:root[data-glass="solid"][data-theme="dark"] {
-  --guard-edge: transparent;
 }
 
 /* When the compositor already blurs behind the window — DWM on Windows, AppKit
@@ -264,6 +174,13 @@
 :root[data-glass="vibrancy"] {
   --blur: 0px;
   --sat: 100%;
+}
+
+/* A macOS material is tinted and adapts to the desktop on its own, so it needs
+   less fill on top than a plain CSS blur does to arrive at the same black. */
+:root[data-glass="vibrancy"] {
+  --glass-fill: rgba(0, 0, 0, 0.88);
+  --glass-fill-strong: rgba(0, 0, 0, 0.96);
 }
 
 /* ---------------------------------- base ---------------------------------- */
@@ -281,15 +198,6 @@ body {
   overflow: hidden;
   user-select: none;
   cursor: default;
-}
-
-/* On macOS, forced `antialiased` renders SF noticeably lighter than every
-   native control beside it — the app's labels end up a half-weight thinner than
-   the menu bar they sit under. Let the system pick in light mode. Dark mode
-   keeps the override, where the default direction of the error is the opposite
-   and text bulks up instead. */
-:root[data-os="macos"][data-theme="light"] body {
-  -webkit-font-smoothing: auto;
 }
 
 #root {
@@ -325,7 +233,7 @@ button {
 }
 
 :focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--text) 55%, transparent);
+  outline: 2px solid rgba(255, 255, 255, 0.75);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
@@ -335,7 +243,7 @@ button {
    resolves to exactly that, so the app's focus ring matches every other app on
    the machine instead of inventing its own. */
 :root[data-os="macos"] :focus-visible {
-  outline: 3px solid color-mix(in srgb, Highlight 60%, transparent);
+  outline: 3px solid color-mix(in srgb, Highlight 65%, transparent);
   outline-offset: 1px;
 }
 
@@ -361,8 +269,7 @@ button {
    element's *unclipped* border box, so on macOS this same rule pushed the blur
    outside the visible shape — in practice killing the backdrop entirely and
    leaving every surface in the app flat. WebKit honours `border-radius` on a
-   backdrop-filtered element correctly on its own, so there is nothing to work
-   around there. */
+   backdrop-filtered element correctly on its own. */
 :root[data-os="windows"] .glass {
   clip-path: inset(0 round var(--radius-card));
 }
@@ -374,38 +281,17 @@ button {
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    var(--glass-sheen) 0%,
-    transparent 46%
-  );
+  background: linear-gradient(180deg, var(--glass-sheen) 0%, transparent 46%);
   z-index: -1;
-}
-
-/* A trace of noise. Large-radius backdrop blur bands badly on flat gradients;
-   ~3% grain hides it and is what stops the surface reading as plastic. */
-.glass::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: -1;
-  opacity: 0.03;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-:root[data-glass="solid"] .glass::after {
-  display: none;
 }
 
 .glass--pill {
   border-radius: var(--radius-pill);
 }
 
-/* The pill's clip has to follow its own radius. Inheriting the card's 16px left
-   a squarer clip than the 22px paint, so the very compositor tile the clip
-   exists to hide stayed visible in the pill's corners. */
+/* The pill's clip has to follow its own radius. Inheriting the card's left a
+   squarer clip than the paint, so the very compositor tile the clip exists to
+   hide stayed visible in the pill's corners. */
 :root[data-os="windows"] .glass--pill {
   clip-path: inset(0 round var(--radius-pill));
 }
@@ -440,42 +326,36 @@ button {
     -webkit-backdrop-filter: none;
     background: var(--glass-fill-strong);
   }
-  .glass::after {
-    display: none;
-  }
 }
 
-/* macOS Accessibility → Display → Increase contrast. Borders become real lines
-   and the quietest text step is retired, because at this setting a user has
-   said outright that they cannot resolve low-contrast detail. */
+/* macOS Accessibility → Display → Increase contrast, and the Windows
+   equivalent. Borders become real lines and the quietest text step is retired,
+   because at this setting a user has said outright that they cannot resolve
+   low-contrast detail. The ramps are left alone — they are already white-to-
+   saturated on black, which is the highest-contrast form they have. */
 @media (prefers-contrast: more) {
-  /* `[data-theme]` rather than a bare `:root`: every one of these tokens is
-     defined on `:root[data-theme="light"]` / `[data-theme="dark"]`, so a
-     single-class selector here would lose the cascade to the theme block and
-     silently do nothing. Matching that specificity and sitting later in the
-     file is what actually makes the override win. */
-  :root[data-theme] {
+  :root {
     --text-faint: var(--text-dim);
-    --hairline: color-mix(in srgb, var(--text) 42%, transparent);
-    --glass-border: color-mix(in srgb, var(--text) 45%, transparent);
-    --guard-track: color-mix(in srgb, var(--text) 30%, transparent);
+    --hairline: rgba(255, 255, 255, 0.42);
+    --glass-border: rgba(255, 255, 255, 0.45);
+    --meter-track: rgba(255, 255, 255, 0.34);
   }
   .glass {
     background: var(--glass-fill-strong);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-  .glass::after {
-    display: none;
-  }
 }
 
 /* --------------------------------- text ----------------------------------- */
 
+/* Every numeral in the app. `tnum` is a no-op for the dot-matrix face, which is
+   already fixed-advance, and does the work for the monospace fallback. */
 .num {
   font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
+  letter-spacing: 0.02em;
 }
 
 .dim {
