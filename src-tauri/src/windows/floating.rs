@@ -4,7 +4,8 @@
 //! coordinate is wrong the moment a laptop is undocked: the bar reappears in
 //! dead space on a display that no longer exists.
 
-use tauri::{Manager, Monitor, PhysicalPosition, PhysicalSize, Runtime, WebviewWindow};
+use tauri::window::Monitor;
+use tauri::{Manager, PhysicalPosition, PhysicalSize, Runtime, WebviewWindow};
 
 use crate::state::AppState;
 
