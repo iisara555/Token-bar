@@ -67,7 +67,11 @@ impl Metrics {
     fn for_scale(scale: f64) -> Self {
         // A monitor reporting a nonsensical scale would otherwise collapse every
         // threshold to zero and the bar would never snap at all.
-        let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+        let scale = if scale.is_finite() && scale > 0.0 {
+            scale
+        } else {
+            1.0
+        };
         let top_inset = (TOP_INSET_LOGICAL * scale).round() as i32;
         Self {
             snap: (SNAP_LOGICAL * scale).round() as i32,
@@ -103,13 +107,15 @@ impl Metrics {
 
         if allow_in_notch {
             metrics.top_inset = 0;
-            let notched =
-                metrics.reserved_top as f64 / scale >= NOTCHED_MENU_BAR_MIN_LOGICAL;
+            let notched = metrics.reserved_top as f64 / scale >= NOTCHED_MENU_BAR_MIN_LOGICAL;
             if notched {
                 let width = m.size().width as f64;
                 let half = width * NOTCH_WIDTH_FRACTION / 2.0;
                 let centre = m.position().x as f64 + width / 2.0;
-                metrics.notch = Some(((centre - half).round() as i32, (centre + half).round() as i32));
+                metrics.notch = Some((
+                    (centre - half).round() as i32,
+                    (centre + half).round() as i32,
+                ));
             }
         } else {
             metrics.top_inset = metrics.reserved_top;
@@ -349,7 +355,10 @@ mod tests {
             clamp_to_monitor(9999, 9999, win, origin, screen, 0),
             (1920 - 560, 1080 - 64)
         );
-        assert_eq!(clamp_to_monitor(100, 100, win, origin, screen, 0), (100, 100));
+        assert_eq!(
+            clamp_to_monitor(100, 100, win, origin, screen, 0),
+            (100, 100)
+        );
     }
 
     #[test]
@@ -358,7 +367,10 @@ mod tests {
         let origin = PhysicalPosition::new(-1920, 0);
         let screen = PhysicalSize::new(1920u32, 1080u32);
         let win = PhysicalSize::new(560u32, 64u32);
-        assert_eq!(clamp_to_monitor(-5000, 0, win, origin, screen, 0), (-1920, 0));
+        assert_eq!(
+            clamp_to_monitor(-5000, 0, win, origin, screen, 0),
+            (-1920, 0)
+        );
     }
 
     #[test]
@@ -378,7 +390,10 @@ mod tests {
         let win = PhysicalSize::new(560u32, 64u32);
         // 52 device pixels is a 26pt macOS menu bar on a 2x display.
         assert_eq!(clamp_to_monitor(100, 0, win, origin, screen, 52), (100, 52));
-        assert_eq!(clamp_to_monitor(100, 300, win, origin, screen, 52), (100, 300));
+        assert_eq!(
+            clamp_to_monitor(100, 300, win, origin, screen, 52),
+            (100, 300)
+        );
     }
 
     #[test]
