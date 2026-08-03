@@ -340,8 +340,18 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn badge_shapes_are_distinct_in_alpha_alone() {
-        let alpha = |b: Badge| badge_icon(b).rgba().chunks(4).map(|p| p[3]).collect::<Vec<_>>();
-        let (normal, warning, over) = (alpha(Badge::Normal), alpha(Badge::Warning), alpha(Badge::Over));
+        let alpha = |b: Badge| {
+            badge_icon(b)
+                .rgba()
+                .chunks(4)
+                .map(|p| p[3])
+                .collect::<Vec<_>>()
+        };
+        let (normal, warning, over) = (
+            alpha(Badge::Normal),
+            alpha(Badge::Warning),
+            alpha(Badge::Over),
+        );
 
         assert_ne!(normal, warning);
         assert_ne!(warning, over);
@@ -354,7 +364,10 @@ mod tests {
     #[test]
     fn macos_icon_carries_no_colour() {
         let img = badge_icon(Badge::Warning);
-        assert!(img.rgba().chunks(4).all(|p| p[0] == 0 && p[1] == 0 && p[2] == 0));
+        assert!(img
+            .rgba()
+            .chunks(4)
+            .all(|p| p[0] == 0 && p[1] == 0 && p[2] == 0));
     }
 
     /// The centre is inside the ring's hole at rest and inside the disc when

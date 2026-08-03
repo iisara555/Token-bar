@@ -146,7 +146,8 @@ fn extract(v: &Value, cents_keys: &[&str], dollar_keys: &[&str]) -> Option<i64> 
                     return Some(dollars_to_cents(n));
                 }
             }
-            map.values().find_map(|c| extract(c, cents_keys, dollar_keys))
+            map.values()
+                .find_map(|c| extract(c, cents_keys, dollar_keys))
         }
         Value::Array(items) => items
             .iter()

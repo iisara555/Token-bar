@@ -289,7 +289,9 @@ mod tests {
     fn a_stale_reading_is_not_recorded_twice() {
         let store = Store::in_memory().unwrap();
         let t0 = Utc::now() - chrono::Duration::hours(1);
-        store.put(&snap(ProviderId::Deepseek, Some(1000), t0)).unwrap();
+        store
+            .put(&snap(ProviderId::Deepseek, Some(1000), t0))
+            .unwrap();
 
         let mut repeated = snap(
             ProviderId::Deepseek,
