@@ -1,138 +1,111 @@
-import {
-  ACCENT,
-  type ProviderView,
-  type QuotaWindow,
-  type UsageSnapshot,
-} from "../types";
-import {
-  budgetRatio,
-  money,
-  relativeTime,
-  resetIn,
-  resetAt,
-  statusLabel,
-  statusTone,
-  tokens,
-  totalTokens,
-} from "../format";
 import { useEffect, useState } from "react";
-import { budgetCentsFor } from "../state/useUsage";
-import { BudgetRing } from "./BudgetRing";
-import { Sparkline } from "./Sparkline";
+import { money, relativeTime, statusLabel, statusTone, tokens, totalTokens } from "../format";
+import { authKind, readingsFor } from "../readings";
+import type { ProviderView, UsageSnapshot } from "../types";
 import { AlertIcon } from "./Icons";
-import { ProviderLogo } from "./ProviderLogo";
+import { MeterBlock } from "./Meter";
 
 interface DetailPanelProps {
   provider: ProviderView;
   snapshot: UsageSnapshot | undefined;
-  warnAt: number;
   windowDays: number;
 }
 
-export function DetailPanel({
-  provider,
-  snapshot,
-  warnAt,
-  windowDays,
-}: DetailPanelProps) {
-  const [, refreshCountdown] = useState(0);
+/**
+ * The card behind a provider in the bar.
+ *
+ * Same readings as the chip, at a size where the reset time can be a wall clock
+ * rather than a countdown and the numeral can be the largest thing on screen.
+ * Nothing new is introduced here that the bar did not already imply — opening
+ * a card should feel like leaning closer, not like navigating somewhere.
+ */
+export function DetailPanel({ provider, snapshot, windowDays }: DetailPanelProps) {
+  const [, tick] = useState(0);
   useEffect(() => {
-    const timer = window.setInterval(() => refreshCountdown((value) => value + 1), 60_000);
+    const timer = window.setInterval(() => tick((n) => n + 1), 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const accent = ACCENT[provider.id];
   const status = snapshot?.status ?? "not_configured";
-  const budget = budgetCentsFor(provider);
-  const ratio = budgetRatio(snapshot?.costCents ?? null, budget);
-
-  const series = (snapshot?.series ?? []).map((b) => b.costCents ?? 0);
+  const readings = readingsFor(provider, snapshot);
+  const kind = authKind(provider);
   const t = snapshot?.tokens;
-  const fiveHour = snapshot?.limits?.fiveHour;
-  const week = snapshot?.limits?.week;
-  const hasLimits = Boolean(fiveHour || week);
+
+  // The money reading that is not the headline.
+  //
+  // On a subscription that is the usage credits accrued alongside the rate
+  // limits; on a pay-as-you-go account it is the spend that the balance was
+  // drawn down from — the same figure the meter above uses as its denominator,
+  // which is worth stating outright rather than leaving implied by a bar
+  // length. Where spend *is* the headline there is nothing left to add.
+  const cost = snapshot?.costCents;
+  const secondary =
+    cost === null || cost === undefined
+      ? null
+      : readings.some((r) => r.key === "fiveHour" || r.key === "week")
+        ? { label: "Usage credits", value: money(cost) }
+        : readings.some((r) => r.key === "balance")
+          ? { label: "Total spend", value: money(cost) }
+          : null;
 
   return (
-    <div className="glass panel">
-      <div className="panel-head">
-        <div className="panel-title">
-          <span className="chip-mark" style={{ ["--accent" as string]: accent }}>
-            <ProviderLogo provider={provider.id} />
-          </span>
-          {provider.name}
+    <div className="glass card-detail">
+      <header className="card-head">
+        <h2 className="card-title">{provider.name}</h2>
+        <span className="card-auth" data-kind={kind}>
+          {kind === "oauth" ? "Oauth" : "API"}
+        </span>
+      </header>
+
+      <div className="card-rule" aria-hidden />
+
+      {readings.length === 0 ? (
+        <div className="card-empty">
           <span className="badge" data-tone={statusTone(status)}>
             {provider.usesOauth && status === "auth_error" ? "Sign in" : statusLabel(status)}
           </span>
-        </div>
-        <div className="panel-meta">
-          {snapshot ? `updated ${relativeTime(snapshot.fetchedAt)}` : "never updated"}
-        </div>
-      </div>
-
-      {hasLimits ? (
-        <div className="quota-grid">
-          <QuotaCard label="5-hour limit" window={fiveHour} />
-          <QuotaCard label="Weekly limit" window={week} />
+          <span className="faint">
+            {snapshot ? "Nothing to report yet." : "No data has arrived yet."}
+          </span>
         </div>
       ) : (
-      <div className="panel-grid">
-        <div>
-          <div
-            className="num"
-            style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em" }}
-          >
-            {money(snapshot?.costCents ?? null)}
-          </div>
-          <div className="faint" style={{ fontSize: 11 }}>
-            last {windowDays} days
-            {snapshot?.balanceCents != null &&
-              ` · ${money(snapshot.balanceCents)} balance`}
-          </div>
-
-          {series.length > 1 && (
-            <div style={{ marginTop: 10 }}>
-              <Sparkline
-                values={series}
-                color={accent}
-                width={220}
-                height={40}
-                label={`${provider.name} daily spend, last ${series.length} days`}
-              />
-            </div>
-          )}
+        <div className="card-meters">
+          {readings.map((r) => (
+            <MeterBlock
+              key={r.key}
+              label={r.longLabel}
+              percent={r.percent}
+              value={r.value}
+              caption={r.longCaption}
+              ramp={r.ramp}
+              description={r.description}
+            />
+          ))}
         </div>
+      )}
 
-        {ratio !== null && (
-          <BudgetRing
-            ratio={ratio}
-            warnAt={warnAt}
-            label={provider.name}
-            sublabel={`of ${money(budget)}`}
-          />
-        )}
-      </div>
+      {secondary && (
+        <div className="card-total">
+          <span className="card-total-label">{secondary.label}</span>
+          <span className="card-total-value num">{secondary.value}</span>
+        </div>
       )}
 
       {t && totalTokens(t) > 0 && (
-        <div className="stat-row">
-          <div className="stat">
-            <span className="dim">Input</span>
-            <span className="num">{tokens(t.input)}</span>
-          </div>
-          <div className="stat">
-            <span className="dim">Output</span>
-            <span className="num">{tokens(t.output)}</span>
-          </div>
-          <div className="stat">
-            <span className="dim">Cache read</span>
-            <span className="num">{tokens(t.cacheRead)}</span>
-          </div>
-          <div className="stat">
-            <span className="dim">Cache write</span>
-            <span className="num">{tokens(t.cacheWrite)}</span>
-          </div>
+        <div className="card-stats">
+          <Stat label="Input" value={tokens(t.input)} />
+          <Stat label="Output" value={tokens(t.output)} />
+          <Stat label="Cache read" value={tokens(t.cacheRead)} />
+          <Stat label="Cache write" value={tokens(t.cacheWrite)} />
         </div>
       )}
+
+      <footer className="card-foot">
+        <span className="faint">
+          {snapshot ? `Updated ${relativeTime(snapshot.fetchedAt)}` : "Never updated"}
+        </span>
+        <span className="faint">Last {windowDays} days</span>
+      </footer>
 
       {snapshot?.message && (
         <div className="notice" data-tone={statusTone(status) === "danger" ? "danger" : undefined}>
@@ -143,45 +116,27 @@ export function DetailPanel({
 
       {/* Say so when the number is inherently behind, rather than letting a
           day-old figure pass for a live one. */}
-      {snapshot && !hasLimits && snapshot.sourceLatencySecs >= 3600 && status === "ok" && (
-        <div className="notice">
-          <AlertIcon />
-          <span>
-            {provider.name} reports in daily buckets — today&rsquo;s figure is
-            partial until the day closes.
-          </span>
-        </div>
-      )}
+      {snapshot &&
+        readings.every((r) => r.key !== "fiveHour" && r.key !== "week") &&
+        snapshot.sourceLatencySecs >= 3600 &&
+        status === "ok" && (
+          <div className="notice">
+            <AlertIcon />
+            <span>
+              {provider.name} reports in daily buckets — today&rsquo;s figure is partial
+              until the day closes.
+            </span>
+          </div>
+        )}
     </div>
   );
 }
 
-function QuotaCard({ label, window }: { label: string; window?: QuotaWindow | null }) {
-  const remaining = window ? Math.round(window.remainingPercent) : null;
-  const resetLabel = window?.resetsAt
-    ? `${resetIn(window.resetsAt)} · ${resetAt(window.resetsAt)}`
-    : "reset time unavailable";
-  const tone =
-    remaining === null
-      ? "neutral"
-      : remaining <= 20
-        ? "danger"
-        : remaining <= 40
-          ? "warn"
-          : "ok";
-
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="quota-card" data-tone={tone}>
-      <div className="quota-card-head">
-        <span>{label}</span>
-        <strong className="num">{remaining === null ? "—" : `${remaining}% left`}</strong>
-      </div>
-      <div className="quota-track" aria-hidden>
-        <span style={{ width: `${remaining ?? 0}%` }} />
-      </div>
-      <div className="quota-reset">
-        {resetLabel}
-      </div>
+    <div className="stat">
+      <span className="dim">{label}</span>
+      <span className="num">{value}</span>
     </div>
   );
 }

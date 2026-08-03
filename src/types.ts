@@ -89,13 +89,11 @@ export interface ProviderView {
 export type AuthMode = "auto" | "oauth" | "api_key";
 export type OAuthStatus = "connected" | "expired" | "not_found";
 
-export type ThemeMode = "system" | "light" | "dark";
 export type GlassPref = "auto" | "on" | "off";
 /** `native` is DWM Mica/Acrylic; `vibrancy` is an AppKit NSVisualEffectView. */
 export type GlassMode = "native" | "vibrancy" | "css" | "solid";
 
 export interface AppView {
-  theme: ThemeMode;
   glass: GlassPref;
   glassMode: GlassMode;
   windowDays: number;
@@ -122,16 +120,3 @@ export const PROVIDER_ORDER: ProviderId[] = [
   "mistral",
 ];
 
-export const ACCENT: Record<ProviderId, string> = {
-  anthropic: "var(--p-anthropic)",
-  openai: "var(--p-openai)",
-  kimi: "var(--p-kimi)",
-  zai: "var(--p-zai)",
-  minimax: "var(--p-minimax)",
-  openrouter: "var(--p-openrouter)",
-  xai: "var(--p-xai)",
-  deepseek: "var(--p-deepseek)",
-  gemini: "var(--p-gemini)",
-  groq: "var(--p-groq)",
-  mistral: "var(--p-mistral)",
-};

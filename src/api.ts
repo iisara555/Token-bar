@@ -12,7 +12,6 @@ import type {
   GlassMode,
   GlassPref,
   ProviderId,
-  ThemeMode,
   UsageSnapshot,
 } from "./types";
 
@@ -34,8 +33,6 @@ export const api = {
   refresh: (provider?: ProviderId) =>
     run<void>("refresh", { provider: provider ?? null }, () => mockApi.refresh(provider)),
 
-  setTheme: (theme: ThemeMode) =>
-    run<void>("set_theme", { theme }, () => mockApi.setTheme(theme)),
   setGlass: (glass: GlassPref) =>
     run<void>("set_glass", { glass }, () => mockApi.setGlass(glass)),
   setWindowDays: (days: number) =>

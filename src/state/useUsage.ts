@@ -5,7 +5,6 @@ import type {
   GlassMode,
   ProviderId,
   ProviderView,
-  ThemeMode,
   UsageSnapshot,
 } from "../types";
 
@@ -46,10 +45,6 @@ export const useUsage = create<UsageState>((set, get) => ({
         // every surface sees provider, appearance and bar changes immediately.
         await onConfigChanged(() => void get().reload());
 
-        watchSystemTheme(() => {
-          const view = get().view;
-          if (view?.theme === "system") applyTheme(view.theme);
-        });
       })().catch((error) => {
         initPromise = null;
         throw error;
@@ -67,7 +62,6 @@ export const useUsage = create<UsageState>((set, get) => ({
         const view = await api.appView();
         const snapshots: Partial<Record<ProviderId, UsageSnapshot>> = {};
         for (const s of view.snapshots) snapshots[s.provider] = s;
-        applyTheme(view.theme);
         applyGlass(view.glassMode);
         set({ view, snapshots, ready: true, error: null });
         return;
@@ -134,78 +128,6 @@ export function budgetCentsFor(p: ProviderView): number | null {
   return Number.isFinite(n) ? Math.round(n * 100) : null;
 }
 
-/**
- * How much of something finite is already spent, across everything enabled.
- *
- * The bar shows many numbers in many units — dollars, tokens, percentages of
- * two unrelated rate-limit windows. None of them can be summed. What they do
- * share is a shape: each one is a fraction of a ceiling that resets. This
- * reduces all of them to that fraction and reports the **worst** one.
- *
- * Worst, not average. Averaging is what turns "the weekly limit is 4% from
- * gone" into a reassuring 30%, and the entire point of an ambient rail is to
- * be the thing that was already showing red before anyone thought to look.
- *
- * Returns null when nothing enabled has a ceiling to measure against — no
- * budgets set and no provider reporting quota windows. That is genuinely
- * different from zero pressure and the rail says so differently.
- */
-export function guardLoad(
-  view: AppView | null,
-  snapshots: Partial<Record<ProviderId, UsageSnapshot>>,
-): GuardLoad | null {
-  let worst: GuardLoad | null = null;
-
-  const consider = (ratio: number, provider: ProviderView, reason: string) => {
-    if (!Number.isFinite(ratio)) return;
-    const clamped = Math.max(0, ratio);
-    if (worst === null || clamped > worst.ratio) {
-      worst = { ratio: clamped, provider: provider.name, reason };
-    }
-  };
-
-  for (const p of enabledProviders(view)) {
-    const snap = snapshots[p.id];
-    if (!snap) continue;
-
-    const budget = budgetCentsFor(p);
-    if (budget !== null && budget > 0 && snap.costCents !== null) {
-      consider(snap.costCents / budget, p, "budget");
-    }
-
-    // A quota window reports what is *left*; the rail reads what is gone.
-    const { fiveHour, week } = snap.limits ?? {};
-    if (fiveHour) consider(1 - fiveHour.remainingPercent / 100, p, "5-hour limit");
-    if (week) consider(1 - week.remainingPercent / 100, p, "weekly limit");
-  }
-
-  return worst;
-}
-
-export interface GuardLoad {
-  /** 0 at rest, 1 at the ceiling. Can exceed 1 — a blown budget is not capped. */
-  ratio: number;
-  /** Whose ceiling this is, for the label. */
-  provider: string;
-  /** Which ceiling: "budget", "5-hour limit", "weekly limit". */
-  reason: string;
-}
-
-// ---------------------------------------------------------------------------
-// Theme plumbing
-// ---------------------------------------------------------------------------
-
-const darkQuery = () => window.matchMedia("(prefers-color-scheme: dark)");
-
-export function applyTheme(mode: ThemeMode) {
-  const dark = mode === "dark" || (mode === "system" && darkQuery().matches);
-  document.documentElement.dataset.theme = dark ? "dark" : "light";
-}
-
 export function applyGlass(mode: GlassMode) {
   document.documentElement.dataset.glass = mode;
-}
-
-function watchSystemTheme(cb: () => void) {
-  darkQuery().addEventListener("change", cb);
 }

@@ -6,19 +6,43 @@ balances, and budget progress across providers. It runs on **macOS 11+** and
 the platform credential store — the login Keychain on macOS, Credential Manager
 on Windows — and all provider requests are made by Rust.
 
-## The status rail
+## The design
 
-Along the foot of the bar is a hairline that fills white → orange as the
-tightest ceiling you are tracking fills up. It reads the **worst** of every
-budget and every rate-limit window across all enabled providers, so it is never
-averaging a nearly-exhausted weekly quota into something reassuring.
+The surface is black and there is no light variant. Colour in this app belongs
+to the meters and to nothing else — that is what lets a glance at the bar go
+straight to the one reading that changed. Provider logos render white for the
+same reason: eleven brand hues would be eleven claims on the eye.
 
-It is meant to be read without being looked at, so it signals with *length*
-first and lets colour ride along: the ramp is painted across the whole rail and
-revealed to the fill width, which makes the colour of the leading edge the
-reading. Pale at 20%, deep orange at 100%. A notch marks the warning threshold.
-It shows nothing when nothing has a ceiling — set a budget in
-**Settings → Providers** to give it something to watch.
+**Two ramps, and only two.**
+
+| Ramp | Used for | Reads |
+|---|---|---|
+| Warm | 5-hour window, spend, credit balance | white → yellow → orange → red |
+| Cool | Weekly window | white → teal → blue → purple |
+
+Which ramp a meter wears says what *kind* of limit it is, not how full it is, so
+the two never swap. Both start at pure white, which on black is the brightest
+the screen can go — that puts the leading edge of an almost-empty meter at
+maximum contrast. The gradient is scaled to the fill, so a meter at 40% still
+ends in its ramp's full-strength colour: short, not faded.
+
+Every meter shows what is **left**, so they all drain in the same direction. A
+bar that filled up as things got worse would be the only one in the app running
+backwards.
+
+**Numerals** are set in [Bitcount Prop Single][bitcount], a dot-matrix face that
+turns each reading into a small array of lit cells. It is subsetted to latin and
+vendored in `src/assets/fonts` — the app's CSP allows `font-src 'self' data:`
+and nothing else, so a webfont CDN would silently fail to load. Labels and prose
+stay in the system UI font.
+
+Providers only get the readings they can actually support: a subscription shows
+its rate-limit windows, a pay-as-you-go account shows its balance against what
+was purchased, and an account with a budget you set shows what is left of it. A
+provider with nothing to report says so rather than being given an empty meter,
+which would read as "zero left" instead of "no data".
+
+[bitcount]: https://github.com/petrvanblokland/TYPETR-Bitcount
 
 ## UI preview
 
@@ -80,10 +104,13 @@ by design; it lives in the menu bar. On Windows, run the generated
 
 Open **Settings → Providers** to save API keys or use a provider's **Link**
 button. Anthropic's button opens Claude.ai in Chrome; Chrome cookies are never
-imported into Token Bar. The bar shows provider subscription windows as
-**5H LEFT** and **WEEK LEFT** when that provider exposes them. Kimi Code can use
-its official OAuth session, while Z.AI and MiniMax use defensive plan/API-key
-usage adapters.
+imported into Token Bar. The bar shows provider subscription windows as **5H**
+and **W** meters when that provider exposes them. Click a provider to open its
+card. Kimi Code can use its official OAuth session, while Z.AI and MiniMax use
+defensive plan/API-key usage adapters.
+
+The bar's wordmark reads **Quoken**; the product is Token Bar. The wordmark is a
+logotype and does not appear in window titles, the tray, or the installer.
 
 ### Platform behaviour
 
@@ -98,6 +125,7 @@ platform convention differs, not because the design does:
 | Settings close button | Top-left, plus <kbd>Cmd</kbd>+<kbd>W</kbd> | Top-right, plus <kbd>Esc</kbd> |
 | Scrollbars | Native overlay, as the user configured them | Custom thin scrollbar |
 | Transparency off | Accessibility → Display → Reduce transparency | Personalization → Colors |
+| Focus ring | System accent colour | White |
 
 The settings window is frameless on both platforms, so it has no real macOS
 traffic lights — the close control is drawn by the app and moved to the left to

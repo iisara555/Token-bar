@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import { enabledProviders, grandTotal, guardLoad, useUsage } from "../state/useUsage";
-import { money } from "../format";
+import { enabledProviders, useUsage } from "../state/useUsage";
 import { ProviderChip } from "../components/ProviderChip";
 import { DetailPanel } from "../components/DetailPanel";
-import { StatusBar } from "../components/StatusBar";
-import { RefreshIcon, SettingsIcon } from "../components/Icons";
+import { Wordmark } from "../components/Wordmark";
+import { RefreshIcon } from "../components/Icons";
 import type { ProviderId } from "../types";
 
 export function FloatingBar() {
@@ -41,97 +40,65 @@ export function FloatingBar() {
   if (error) {
     return (
       <div className="bar-root" ref={rootRef}>
-        <div className="glass glass--pill bar-shell" data-compact={view?.compact}>
-          <div className="bar" data-tauri-drag-region>
-            <span style={{ fontSize: "var(--text-sm)", padding: "0 8px" }}>{error}</span>
-          </div>
+        <div className="glass glass--pill bar" data-tauri-drag-region>
+          <Wordmark />
+          <span className="bar-error">{error}</span>
         </div>
       </div>
     );
   }
 
   const providers = enabledProviders(view);
-  const total = grandTotal(view, snapshots);
   const active = providers.find((p) => p.id === expanded);
-  const load = guardLoad(view, snapshots);
-  const hasQuotaProviders = providers.some((p) => {
-    const limits = snapshots[p.id]?.limits;
-    return Boolean(limits?.fiveHour || limits?.week);
-  });
 
   return (
     <div className="bar-root" ref={rootRef}>
-      <div className="glass glass--pill bar-shell" data-compact={view?.compact}>
-        <div className="bar" data-tauri-drag-region>
-          <span className="bar-grip" data-tauri-drag-region aria-hidden />
+      <div
+        className="glass glass--pill bar"
+        data-compact={view?.compact}
+        data-tauri-drag-region
+      >
+        <Wordmark />
 
-          {providers.length === 0 ? (
-            <span className="dim" style={{ fontSize: "var(--text-sm)", padding: "0 6px" }}>
-              No providers enabled
-            </span>
-          ) : (
-            providers.map((p) => (
+        {providers.length === 0 ? (
+          <span className="bar-error">No providers enabled</span>
+        ) : (
+          providers.map((p) => (
+            <div className="bar-cell" key={p.id}>
+              <span className="bar-divider" aria-hidden />
               <ProviderChip
-                key={p.id}
                 provider={p}
                 snapshot={snapshots[p.id]}
                 expanded={expanded === p.id}
                 onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
               />
-            ))
-          )}
+            </div>
+          ))
+        )}
 
-          <span className="divider" aria-hidden />
-
-          <span className="total">
-            <span className="total-value num">
-              {total.reporting > 0
-                ? money(total.cents)
-                : hasQuotaProviders
-                  ? "LIVE"
-                  : money(total.cents)}
-            </span>
-            <span className="total-label">
-              {/* Never present a partial sum as the whole picture. */}
-              {total.reporting === 0 && hasQuotaProviders
-                ? "limits remaining"
-                : total.reporting === total.total
-                ? `${view?.windowDays ?? 30}d total`
-                : `${total.reporting}/${total.total} reporting`}
-            </span>
-          </span>
-
-          <span className="bar-actions">
-            <button
-              type="button"
-              className="icon-btn"
-              data-spinning={spinning}
-              onClick={onRefresh}
-              title="Refresh now"
-            >
-              <RefreshIcon />
-              <span className="sr-only">Refresh</span>
-            </button>
-            <button
-              type="button"
-              className="icon-btn"
-              onClick={() => void api.openSettings()}
-              title="Settings"
-            >
-              <SettingsIcon />
-              <span className="sr-only">Settings</span>
-            </button>
-          </span>
-        </div>
-
-        <StatusBar load={load} warnAt={view?.warnAt ?? 0.8} />
+        <button
+          type="button"
+          className="icon-btn bar-refresh"
+          data-spinning={spinning}
+          onClick={onRefresh}
+          title="Refresh now"
+          onContextMenu={(e) => {
+            // The bar has no room for a settings control at this density, and
+            // the tray menu is the discoverable route. Right-click here is the
+            // shortcut for anyone who never goes to the tray.
+            e.preventDefault();
+            void api.openSettings();
+          }}
+        >
+          <RefreshIcon />
+          <span className="sr-only">Refresh all providers</span>
+        </button>
       </div>
 
       {active && (
         <DetailPanel
           provider={active}
           snapshot={snapshots[active.id]}
-          warnAt={view?.warnAt ?? 0.8}
           windowDays={view?.windowDays ?? 30}
         />
       )}
@@ -143,8 +110,8 @@ export function FloatingBar() {
  * Keep the window exactly as big as its contents.
  *
  * The bar has no fixed width — it grows with the number of enabled providers
- * and doubles in height when a panel opens. Sizing the OS window to match is
- * what stops the transparent window from swallowing clicks in the empty space
+ * and grows again when a card opens. Sizing the OS window to match is what
+ * stops the transparent window from swallowing clicks in the empty space
  * around the pill.
  */
 function useAutoSize(
@@ -160,11 +127,11 @@ function useAutoSize(
     const send = () => {
       const children = Array.from(el.children);
       if (children.length === 0) return;
-      // Root padding is shadow room; include it so nothing is clipped.
-      // The detail panel can be wider than a short bar, so size for whichever
-      // visible surface currently needs the most room.
+      // Root padding is shadow room; include it so nothing is clipped. The card
+      // can be wider than a short bar, so size for whichever visible surface
+      // currently needs the most room.
       const w = Math.ceil(
-        Math.max(...children.map((child) => child.getBoundingClientRect().width)) + 16,
+        Math.max(...children.map((child) => child.getBoundingClientRect().width)) + 24,
       );
       const h = Math.ceil(el.scrollHeight);
       // Resizing the window re-fires the observer; without this guard the two

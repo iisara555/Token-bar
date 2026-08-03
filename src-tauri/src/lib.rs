@@ -13,7 +13,6 @@ pub mod windows;
 
 use tauri::{AppHandle, Manager, Runtime, WindowEvent};
 
-use crate::config::ThemeMode;
 use crate::providers::Status;
 use crate::state::AppState;
 use crate::vibrancy::GlassMode;
@@ -28,24 +27,17 @@ pub fn current_glass_mode<R: Runtime>(app: &AppHandle<R>) -> GlassMode {
         .unwrap_or(GlassMode::Css)
 }
 
-/// Re-run the backdrop decision across every window. Called when the theme or
-/// the glass preference changes.
+/// Re-run the backdrop decision across every window. Called when the glass
+/// preference changes.
 pub fn reapply_glass<R: Runtime>(app: &AppHandle<R>) {
-    let (pref, theme) = {
-        let cfg = app.state::<AppState>().config.get();
-        (cfg.glass, cfg.theme)
-    };
+    let pref = app.state::<AppState>().config.get().glass;
 
-    // `System` follows whatever the OS reports for the bar window.
-    let dark = match theme {
-        ThemeMode::Dark => true,
-        ThemeMode::Light => false,
-        ThemeMode::System => app
-            .get_webview_window(BAR)
-            .and_then(|w| w.theme().ok())
-            .map(|t| t == tauri::Theme::Dark)
-            .unwrap_or(true),
-    };
+    // The app's surfaces are black and there is no light variant, so the
+    // material is always the dark one. This used to follow the OS appearance;
+    // letting it do that now would put a light Mica or a light NSVisualEffect
+    // material behind black content on a machine set to Light, which reads as a
+    // grey haze around every window edge.
+    const DARK: bool = true;
 
     let mut resolved = GlassMode::Solid;
     for label in [BAR, POPOVER, SETTINGS] {
@@ -55,7 +47,7 @@ pub fn reapply_glass<R: Runtime>(app: &AppHandle<R>) {
             let mode = if label == BAR {
                 vibrancy::apply_bar(&w, pref)
             } else {
-                vibrancy::apply(&w, pref, dark)
+                vibrancy::apply(&w, pref, DARK)
             };
             if label == BAR {
                 resolved = mode;
@@ -210,7 +202,6 @@ pub fn run() {
             commands::get_app_view,
             commands::get_snapshots,
             commands::refresh,
-            commands::set_theme,
             commands::set_glass,
             commands::set_window_days,
             commands::set_provider_enabled,

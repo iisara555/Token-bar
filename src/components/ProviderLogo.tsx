@@ -10,7 +10,7 @@ import kimi from "@lobehub/icons-static-svg/icons/kimi.svg";
 import minimax from "@lobehub/icons-static-svg/icons/minimax.svg";
 import zai from "@lobehub/icons-static-svg/icons/zai.svg";
 import type { CSSProperties } from "react";
-import { ACCENT, type ProviderId } from "../types";
+import type { ProviderId } from "../types";
 
 const LOGO: Record<ProviderId, string> = {
   anthropic,
@@ -26,6 +26,15 @@ const LOGO: Record<ProviderId, string> = {
   mistral,
 };
 
+/**
+ * A provider's mark, drawn in whatever colour it inherits.
+ *
+ * The logos used to carry their brand hues. On black they now render white,
+ * with everything else: colour in this design belongs to the two meter ramps
+ * and to nothing else, so a row of eleven brand colours would be eleven claims
+ * on the eye competing with the one reading that matters. The marks are already
+ * distinct as shapes — that is what a logo is for.
+ */
 export function ProviderLogo({ provider, size = 18 }: { provider: ProviderId; size?: number }) {
   return (
     <span
@@ -35,7 +44,6 @@ export function ProviderLogo({ provider, size = 18 }: { provider: ProviderId; si
         {
           width: size,
           height: size,
-          color: ACCENT[provider],
           // Data URLs contain SVG punctuation; quoting keeps the CSS custom
           // property valid so the mask is applied instead of a solid square.
           "--provider-logo": `url("${LOGO[provider]}")`,

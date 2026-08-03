@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import { api } from "../api";
-import { enabledProviders, grandTotal, guardLoad, useUsage } from "../state/useUsage";
-import { money, relativeTime, statusLabel, statusTone, tokens, totalTokens } from "../format";
-import { ACCENT, type UsageSnapshot } from "../types";
+import { enabledProviders, grandTotal, useUsage } from "../state/useUsage";
+import { money, relativeTime, statusLabel, tokens, totalTokens } from "../format";
+import { readingsFor } from "../readings";
+import type { ProviderView, UsageSnapshot } from "../types";
 import { ProviderLogo } from "../components/ProviderLogo";
-import { StatusBar } from "../components/StatusBar";
 
 export function Popover() {
   const { view, snapshots, ready, init } = useUsage();
@@ -25,7 +25,6 @@ export function Popover() {
 
   const providers = enabledProviders(view);
   const total = grandTotal(view, snapshots);
-  const load = guardLoad(view, snapshots);
 
   return (
     <div className="popover-root">
@@ -38,10 +37,6 @@ export function Popover() {
               {total.reporting} of {total.total} providers reporting a cost
             </div>
           )}
-          {/* Same rail as the bar, same reading. The popover is where someone
-              looks *after* the rail caught their eye, so it has to be the thing
-              they recognise at the top of it. */}
-          <StatusBar load={load} warnAt={view?.warnAt ?? 0.8} inline />
         </div>
 
         <div className="popover-list">
@@ -65,11 +60,7 @@ export function Popover() {
                 onClick={() => void api.refresh(p.id)}
                 title={`Refresh ${p.name}`}
               >
-                <span
-                  className="chip-mark"
-                  data-status={s?.status ?? "not_configured"}
-                  style={{ ["--accent" as string]: ACCENT[p.id] }}
-                >
+                <span className="chip-mark" data-status={s?.status ?? "not_configured"}>
                   <ProviderLogo provider={p.id} />
                 </span>
                 {/* Spans, not divs: a <button>'s content model is phrasing
@@ -82,10 +73,7 @@ export function Popover() {
                     {tokenTotal > 0 && ` · ${tokens(tokenTotal)} tok`}
                   </span>
                 </span>
-                <span className="badge" data-tone={statusTone(s?.status ?? "not_configured")}>
-                  {statusLabel(s?.status ?? "not_configured")}
-                </span>
-                <span className="popover-row-value num">{summaryValue(s)}</span>
+                <span className="popover-row-value num">{summaryValue(p, s)}</span>
               </button>
             );
           })}
@@ -114,13 +102,21 @@ export function Popover() {
   );
 }
 
-function summaryValue(snapshot: UsageSnapshot | undefined): string {
-  const fiveHour = snapshot?.limits?.fiveHour;
-  const week = snapshot?.limits?.week;
-  if (fiveHour || week) {
-    const five = fiveHour ? `${Math.round(fiveHour.remainingPercent)}%` : "—";
-    const seven = week ? `${Math.round(week.remainingPercent)}%` : "—";
-    return `5H ${five} · W ${seven}`;
-  }
-  return money(snapshot?.costCents ?? snapshot?.balanceCents ?? null);
+/**
+ * The one-line version of what the bar plots.
+ *
+ * Built from the same readings the meters use, so a provider cannot summarise
+ * itself differently here than it does two windows away.
+ */
+function summaryValue(provider: ProviderView, snapshot: UsageSnapshot | undefined): string {
+  const readings = readingsFor(provider, snapshot);
+  if (readings.length === 0) return statusLabel(snapshot?.status ?? "not_configured");
+  return readings
+    .map((r) =>
+      // A money reading already carries its own currency mark; prefixing the
+      // "$" tag as well reads as "$ $25.82". The tag earns its place only where
+      // it names a window the value cannot.
+      r.shortLabel === "$" ? r.value : `${r.shortLabel} ${r.value}`,
+    )
+    .join(" · ");
 }

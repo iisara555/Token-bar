@@ -4,7 +4,6 @@ import type {
   GlassPref,
   ProviderId,
   ProviderView,
-  ThemeMode,
   UsageSnapshot,
 } from "./types";
 
@@ -231,7 +230,6 @@ const snapshots: UsageSnapshot[] = [
 ];
 
 let view: AppView = {
-  theme: "system",
   glass: "auto",
   glassMode: "css",
   windowDays: 30,
@@ -298,10 +296,6 @@ export const mockApi = {
     persist();
   },
 
-  async setTheme(theme: ThemeMode) {
-    view.theme = theme;
-    emitConfig();
-  },
   async setGlass(glass: GlassPref) {
     view.glass = glass;
     view.glassMode = glass === "off" ? "solid" : "css";
