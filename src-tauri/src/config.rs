@@ -14,7 +14,9 @@ use crate::providers::ProviderId;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthMode {
-    /// Prefer an existing Claude Code / Codex / Kimi Code login, then fall back to an API key.
+    /// Prefer an existing Claude Code / Codex / Kimi Code login (or, for
+    /// Antigravity, a login Token Bar performed itself), then fall back to an
+    /// API key.
     #[default]
     Auto,
     Oauth,
@@ -39,7 +41,8 @@ pub enum GlassPref {
 pub struct ProviderConfig {
     pub enabled: bool,
     /// Anthropic, OpenAI and Kimi can read the user's existing official client
-    /// login. Other providers ignore this and continue to use their API key.
+    /// login; Antigravity has its own Token-Bar-driven login instead. Other
+    /// providers ignore this and continue to use their API key.
     #[serde(default)]
     pub auth_mode: AuthMode,
     /// Non-secret per-provider settings: `team_id`, `budget_usd`,

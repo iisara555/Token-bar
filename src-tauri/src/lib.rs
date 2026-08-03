@@ -215,6 +215,8 @@ pub fn run() {
             commands::set_provider_option,
             commands::save_provider_key,
             commands::clear_provider_key,
+            commands::antigravity_login,
+            commands::antigravity_logout,
             commands::bar_set_size,
             commands::window_fit,
             commands::bar_dropped,

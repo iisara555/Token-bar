@@ -123,6 +123,21 @@ and notarises automatically once they exist:
 `APPLE_SIGNING_IDENTITY`, `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,
 `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`
 
+### Antigravity sign-in credentials
+
+Antigravity's OAuth client id and secret are not committed to this repo — they
+are Google's credentials for a real registered OAuth client, not this
+project's to redistribute in source. Set `ANTIGRAVITY_CLIENT_ID` and
+`ANTIGRAVITY_CLIENT_SECRET` as repository secrets (same mechanism as the
+`APPLE_*` ones above) and the release workflow bakes them into the binary; set
+them as local environment variables instead when running `cargo tauri dev`.
+Without either, Antigravity's Connect button reports a config error rather
+than pretending to sign in. Community reverse-engineering of the Antigravity
+IDE (e.g. the `opencode-antigravity-auth` project) is one source for a working
+client id/secret pair, if you want the feature to work out of the box on a
+build you control; whether that redistribution is appropriate for a build you
+publish is your call to make, not this project's.
+
 ### Building installers locally
 
 ```sh
@@ -149,6 +164,17 @@ imported into Token Bar. The bar shows provider subscription windows as **5H**
 and **W** meters when that provider exposes them. Click a provider to open its
 card. Kimi Code can use its official OAuth session, while Z.AI and MiniMax use
 defensive plan/API-key usage adapters.
+
+**Antigravity** is a separate Google login from a Gemini API key — it is not
+another name for one, and connecting it does not touch any Gemini API key
+saved elsewhere in Settings. There is no existing session to read, so its
+**Connect** button in the provider card runs Token Bar's own Google sign-in
+and keeps the resulting token apart from pasted API keys in the credential
+store. Google publishes no usage API for Antigravity; the quota reading comes
+from the same undocumented internal endpoint Antigravity itself calls and may
+need updates if Google changes it. Connect needs an OAuth client id/secret
+baked into the build (see [Antigravity sign-in credentials](#antigravity-sign-in-credentials));
+without one it reports a config error instead of doing nothing silently.
 
 The bar's wordmark reads **Quoken**; the product is Token Bar. The wordmark is a
 logotype and does not appear in window titles, the tray, or the installer.

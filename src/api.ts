@@ -61,6 +61,13 @@ export const api = {
   clearKey: (provider: ProviderId) =>
     run<void>("clear_provider_key", { provider }, () => mockApi.clearKey(provider)),
 
+  /** Opens the system browser for Antigravity's own Google sign-in and waits
+   * for it to complete — can take a while, bounded on the Rust side. */
+  antigravityLogin: () =>
+    run<void>("antigravity_login", undefined, () => mockApi.antigravityLogin()),
+  antigravityLogout: () =>
+    run<void>("antigravity_logout", undefined, () => mockApi.antigravityLogout()),
+
   barSetSize: (width: number, height: number) =>
     run<void>("bar_set_size", { width, height }, mockApi.noop),
   windowFit: (label: string, width: number, height: number) =>

@@ -250,7 +250,8 @@ pub fn set_provider_auth_mode<R: Runtime>(
     let id = parse_id(&provider)?;
     if !crate::oauth::supports(id) && auth_mode == AuthMode::Oauth {
         return Err(
-            "OAuth usage is currently available for Anthropic, OpenAI and Kimi Code".into(),
+            "OAuth usage is currently available for Anthropic, OpenAI, Kimi Code and Antigravity"
+                .into(),
         );
     }
     state
@@ -262,11 +263,48 @@ pub fn set_provider_auth_mode<R: Runtime>(
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Antigravity sign-in
+// ---------------------------------------------------------------------------
+
+/// Run Token Bar's own Google OAuth PKCE login for Antigravity: opens the
+/// system browser, waits for the loopback redirect, and stores the resulting
+/// refresh token in the OS credential store. Bounded by `oauth::LOGIN_TIMEOUT`
+/// so a closed browser tab does not hang this command forever.
+#[tauri::command]
+pub async fn antigravity_login<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> CmdResult<()> {
+    let client = state.http.clone();
+    crate::oauth::antigravity_login(&client)
+        .await
+        .map_err(|e| e.to_string())?;
+    state.nudge(ProviderId::Antigravity);
+    announce_config(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn antigravity_logout<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> CmdResult<()> {
+    crate::oauth::antigravity_logout().map_err(|e| e.to_string())?;
+    state.nudge(ProviderId::Antigravity);
+    announce_config(&app);
+    Ok(())
+}
+
 fn provider_link(id: ProviderId) -> Option<(&'static str, &'static str)> {
     Some(match id {
         ProviderId::Anthropic => ("https://claude.ai/settings", "Link Claude.ai"),
         ProviderId::Openai => ("https://chatgpt.com/", "Link ChatGPT"),
         ProviderId::Kimi => ("https://www.kimi.com/code", "Link Kimi"),
+        // Antigravity has no existing-session link to open — Token Bar's own
+        // Connect button in the provider detail runs the sign-in itself. This
+        // just points to the product page.
+        ProviderId::Antigravity => ("https://antigravity.google/", "About Antigravity"),
         ProviderId::Zai => ("https://z.ai/subscribe", "Open Z.AI"),
         ProviderId::Minimax => (
             "https://platform.minimaxi.com/subscribe/token-plan",
