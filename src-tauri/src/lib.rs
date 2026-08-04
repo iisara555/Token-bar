@@ -1,5 +1,6 @@
 //! Token Bar — always-on-top AI usage toolbar.
 
+pub mod alerts;
 pub mod commands;
 pub mod config;
 pub mod oauth;
@@ -113,11 +114,42 @@ pub fn refresh_tray<R: Runtime>(app: &AppHandle<R>) {
     tray::update(app, worst, &tooltip);
 }
 
+/// Where this app's log lines actually go.
+///
+/// A release build sets `windows_subsystem = "windows"` so that a toolbar does
+/// not drag a console window around behind it — which also means it has no
+/// stderr, which is where `env_logger` was writing. Every `log::warn!` in the
+/// scheduler was therefore discarded in the only build a user ever installs,
+/// and "Anthropic says Error" had no trail to follow at all.
+///
+/// A file in the OS log directory is the fix, capped and rotated so a provider
+/// failing in a loop cannot fill someone's disk overnight. Stdout is kept
+/// alongside it under `cargo tauri dev`, where there is a terminal to read.
+fn logging<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    use tauri_plugin_log::{Target, TargetKind};
+
+    let builder = tauri_plugin_log::Builder::new()
+        .level(log::LevelFilter::Info)
+        // Provider responses are redacted before they are logged (see
+        // `providers::redact`), but a body echoed at debug level is a shape this
+        // app should not write to disk at all.
+        .level_for("reqwest", log::LevelFilter::Warn)
+        .max_file_size(512 * 1024)
+        .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+        .target(Target::new(TargetKind::LogDir {
+            file_name: Some("token-bar".into()),
+        }));
+
+    #[cfg(debug_assertions)]
+    let builder = builder.target(Target::new(TargetKind::Stdout));
+
+    builder.build()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-
     tauri::Builder::default()
+        .plugin(logging())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // Second launch just brings the existing bar forward.
             if let Some(w) = app.get_webview_window(BAR) {
@@ -177,11 +209,17 @@ pub fn run() {
             }
             refresh_tray(&handle);
 
-            // Keep the tray in step with incoming data.
+            // Keep the tray in step with incoming data, and say something out
+            // loud when a provider crosses a threshold. Both read the same
+            // event, so the badge and the notification cannot disagree about
+            // what the data said.
             {
                 use tauri::Listener;
                 let h = handle.clone();
-                handle.listen(scheduler::EVENT_UPDATED, move |_| refresh_tray(&h));
+                handle.listen(scheduler::EVENT_UPDATED, move |_| {
+                    refresh_tray(&h);
+                    alerts::check(&h);
+                });
             }
 
             scheduler::spawn_all(handle.clone());
@@ -204,8 +242,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_view,
-            commands::get_snapshots,
             commands::refresh,
+            commands::check_for_update,
+            commands::open_releases_page,
             commands::set_glass,
             commands::set_window_days,
             commands::set_warn_at,

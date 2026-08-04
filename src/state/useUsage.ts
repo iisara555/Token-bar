@@ -121,13 +121,6 @@ export function grandTotal(
   return { cents, reporting, total: providers.length };
 }
 
-export function budgetCentsFor(p: ProviderView): number | null {
-  const raw = p.options["budget_usd"];
-  if (!raw) return null;
-  const n = Number.parseFloat(raw);
-  return Number.isFinite(n) ? Math.round(n * 100) : null;
-}
-
 export function applyGlass(mode: GlassMode) {
   document.documentElement.dataset.glass = mode;
 }

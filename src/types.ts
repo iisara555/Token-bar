@@ -92,6 +92,13 @@ export interface ProviderView {
 export type AuthMode = "auto" | "oauth" | "api_key";
 export type OAuthStatus = "connected" | "expired" | "not_found";
 
+/** What `check_for_update` found. `latest` is null when nothing is published. */
+export interface UpdateCheck {
+  current: string;
+  latest: string | null;
+  available: boolean;
+}
+
 export type GlassPref = "auto" | "on" | "off";
 /** `native` is DWM Mica/Acrylic; `vibrancy` is an AppKit NSVisualEffectView. */
 export type GlassMode = "native" | "vibrancy" | "css" | "solid";

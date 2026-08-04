@@ -487,6 +487,90 @@
   line-height: 1;
 }
 
+/* --------------------------------- update --------------------------------- */
+
+.update-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+}
+
+/* The one control in Settings that is armed rather than merely available: an
+   update exists and this is the thing to press. Same accent as a switch that is
+   on, for the same reason — it marks a control, never a status. */
+.btn[data-accent] {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.btn[data-accent]:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.btn:disabled:active {
+  transform: none;
+}
+
+/* ------------------------------- sparkline -------------------------------- */
+
+/* Daily spend as lit cells, which is the same family the numerals belong to.
+   No axis, no gridline, no per-bar figure: the card prints the period total
+   above this, and what the row adds is shape — steady, or one bad Tuesday. */
+.spark {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.spark-head,
+.spark-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.spark-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* 34px is enough to separate a quiet day from a heavy one and not so much that
+   the card turns into a chart. `align-items: flex-end` is what makes the bars
+   grow up from a shared baseline rather than hang from the top. */
+.spark-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 34px;
+}
+
+.spark-bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  border-radius: var(--radius-xs);
+  /* The warm ramp is what spend already wears on its meter, so the two agree.
+     Painted bottom-up here because a bar grows in the other axis from a track. */
+  background: linear-gradient(0deg, #ffc53d 0%, #ff8f1f 70%, #f23e1e 100%);
+}
+
+/* A day with no spend is a fact, and it is drawn as the empty track rather than
+   as a missing bar — an absent element would read as a day that never loaded. */
+.spark-bar[data-empty] {
+  height: 2px !important;
+  background: var(--meter-track);
+}
+
 .card-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

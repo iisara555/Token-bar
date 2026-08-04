@@ -151,12 +151,3 @@ export function hotkeyLabel(accelerator: string, mac: boolean): string {
   symbols.sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
   return [...symbols, ...keys].join("");
 }
-
-/** Budget usage as a 0..1+ ratio, or null when no budget is set. */
-export function budgetRatio(
-  spentCents: number | null,
-  budgetCents: number | null,
-): number | null {
-  if (spentCents === null || budgetCents === null || budgetCents <= 0) return null;
-  return spentCents / budgetCents;
-}

@@ -22,6 +22,10 @@ pub struct AppState {
     /// its current sleep and re-read config — that is how "Refresh now" and
     /// "key saved" take effect without restarting the app.
     pub wake: BTreeMap<ProviderId, Arc<Notify>>,
+    /// The alert level each provider was last seen at. This is what makes a
+    /// threshold notification fire on the crossing rather than on every poll
+    /// for the rest of the window. See [`crate::alerts`].
+    pub alerts: Mutex<crate::alerts::Seen>,
 }
 
 impl AppState {
@@ -47,6 +51,7 @@ impl AppState {
             http,
             wake,
             glass_mode: Mutex::new(GlassMode::Css),
+            alerts: Mutex::new(Default::default()),
         }
     }
 

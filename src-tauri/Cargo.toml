@@ -21,6 +21,10 @@ tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-ap
 tauri-plugin-notification = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
+# Writes to a real file in the OS log directory. `env_logger` wrote to stderr,
+# and `windows_subsystem = "windows"` means a release build has no stderr — so
+# every warning the scheduler logged went nowhere in the one build that ships.
+tauri-plugin-log = "2"
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -48,7 +52,6 @@ keyring = { version = "3", default-features = false }
 rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
 window-vibrancy = "0.6"
 log = "0.4"
-env_logger = "0.11"
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }

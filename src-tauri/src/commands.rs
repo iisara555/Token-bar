@@ -423,9 +423,126 @@ pub fn refresh(state: State<'_, AppState>, provider: Option<String>) -> CmdResul
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Updates
+// ---------------------------------------------------------------------------
+
+/// The repository releases are published from. Fixed here rather than
+/// configurable: an update endpoint that the webview or a config file could
+/// point elsewhere is a way to be told to download something else.
+const RELEASES_API: &str = "https://api.github.com/repos/iisara555/Quoken/releases/latest";
+pub const RELEASES_PAGE: &str = "https://github.com/iisara555/Quoken/releases/latest";
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCheck {
+    /// The version running right now.
+    pub current: String,
+    /// The newest published version, when the check reached GitHub.
+    pub latest: Option<String>,
+    pub available: bool,
+}
+
+/// Ask GitHub whether anything newer has been published.
+///
+/// This checks and reports; it does not install. Installing in place needs a
+/// signed update artifact and a private key held outside this repository, and
+/// an updater that downloads and runs an *unsigned* binary is a worse thing to
+/// ship than a button that sends you to a download page. See README.
 #[tauri::command]
-pub fn get_snapshots(state: State<'_, AppState>) -> CmdResult<Vec<UsageSnapshot>> {
-    state.store.all_latest().map_err(|e| e.to_string())
+pub async fn check_for_update<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> CmdResult<UpdateCheck> {
+    let current = app.package_info().version.to_string();
+    let client = state.http.clone();
+
+    let resp = client
+        .get(RELEASES_API)
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| {
+            format!(
+                "could not reach GitHub: {}",
+                crate::providers::redact(&e.to_string())
+            )
+        })?;
+
+    if !resp.status().is_success() {
+        // A repository with no releases yet answers 404, and that is not an
+        // error the user can do anything about — it means "nothing published".
+        if resp.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(UpdateCheck {
+                current,
+                latest: None,
+                available: false,
+            });
+        }
+        return Err(format!("GitHub returned HTTP {}", resp.status().as_u16()));
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Release {
+        tag_name: String,
+    }
+    let release: Release = resp
+        .json()
+        .await
+        .map_err(|_| "could not read GitHub's reply".to_string())?;
+
+    let latest = release.tag_name;
+    let available = is_newer(&latest, &current);
+    Ok(UpdateCheck {
+        current,
+        latest: Some(strip_tag(&latest).to_string()),
+        available,
+    })
+}
+
+/// Open the releases page in the user's browser. Takes no argument: the URL is
+/// this constant and nothing else.
+#[tauri::command]
+pub fn open_releases_page() -> CmdResult<()> {
+    open_url(RELEASES_PAGE)
+}
+
+/// Drop whatever a tag puts in front of the number. `tauri-action` publishes
+/// `app-v0.1.0` by default, plain `v0.1.0` is the other common shape, and a
+/// bare `0.1.0` has to keep working too.
+fn strip_tag(tag: &str) -> &str {
+    tag.trim_start_matches(|c: char| !c.is_ascii_digit())
+}
+
+/// Numeric field-by-field comparison, not string comparison: `0.10.0` is newer
+/// than `0.9.0` and sorts before it as text.
+///
+/// Anything unparseable is treated as "not newer". A malformed tag should leave
+/// a working install alone rather than send its owner to a download page.
+fn is_newer(candidate: &str, current: &str) -> bool {
+    let parse = |v: &str| -> Option<Vec<u64>> {
+        let v = strip_tag(v);
+        // Drop any pre-release or build suffix: `0.2.0-beta.1` compares as 0.2.0.
+        let core = v.split(['-', '+']).next()?;
+        let parts: Vec<u64> = core
+            .split('.')
+            .map(|p| p.parse::<u64>())
+            .collect::<Result<_, _>>()
+            .ok()?;
+        (!parts.is_empty()).then_some(parts)
+    };
+    let (Some(a), Some(b)) = (parse(candidate), parse(current)) else {
+        return false;
+    };
+    // Compare padded, so `0.2` and `0.2.0` are the same version.
+    let len = a.len().max(b.len());
+    let at = |v: &Vec<u64>, i: usize| v.get(i).copied().unwrap_or(0);
+    (0..len)
+        .find_map(|i| match at(&a, i).cmp(&at(&b, i)) {
+            std::cmp::Ordering::Equal => None,
+            other => Some(other == std::cmp::Ordering::Greater),
+        })
+        .unwrap_or(false)
 }
 
 // ---------------------------------------------------------------------------
@@ -558,7 +675,16 @@ pub fn open_settings<R: Runtime>(app: AppHandle<R>) -> CmdResult<()> {
 pub fn open_provider_link(provider: String) -> CmdResult<()> {
     let id = parse_id(&provider)?;
     let (url, _) = provider_link(id).ok_or_else(|| "provider has no link".to_string())?;
+    open_url(url)
+}
 
+/// Hand a URL to the platform's browser.
+///
+/// Private, and every caller passes a `&'static str` chosen in this file. That
+/// is the property worth keeping: these end up as arguments to `cmd /c start`
+/// and to `open`, so a URL that could come from the webview would make this a
+/// launcher for whatever the webview asked for.
+fn open_url(url: &str) -> CmdResult<()> {
     #[cfg(target_os = "windows")]
     {
         // Prefer Chrome because the Link action is intended to reach the
@@ -643,5 +769,45 @@ mod tests {
     fn unknown_provider_is_an_error_not_a_panic() {
         assert!(parse_id("not-a-provider").is_err());
         assert_eq!(parse_id("anthropic").unwrap(), ProviderId::Anthropic);
+    }
+
+    #[test]
+    fn tags_lose_whatever_prefix_they_were_published_with() {
+        // `tauri-action` publishes `app-v0.1.0`; `v0.1.0` and `0.1.0` are the
+        // other two shapes a release tag turns up in.
+        assert_eq!(strip_tag("app-v0.1.0"), "0.1.0");
+        assert_eq!(strip_tag("v0.1.0"), "0.1.0");
+        assert_eq!(strip_tag("0.1.0"), "0.1.0");
+    }
+
+    /// The bug this exists to prevent: compared as text, "0.10.0" sorts before
+    /// "0.9.0", so the update after 0.9 would never be offered.
+    #[test]
+    fn versions_compare_numerically_not_alphabetically() {
+        assert!(is_newer("v0.10.0", "0.9.0"));
+        assert!(!is_newer("v0.9.0", "0.10.0"));
+        assert!(is_newer("v1.0.0", "0.99.99"));
+    }
+
+    #[test]
+    fn the_same_version_is_not_an_update() {
+        assert!(!is_newer("app-v0.1.0", "0.1.0"));
+        assert!(!is_newer("v0.1", "0.1.0"), "0.1 and 0.1.0 are one version");
+        assert!(!is_newer("v0.0.9", "0.1.0"));
+    }
+
+    /// A malformed tag must leave a working install alone rather than send its
+    /// owner off to a download page for a release that may not exist.
+    #[test]
+    fn an_unparseable_tag_is_never_newer() {
+        assert!(!is_newer("nightly", "0.1.0"));
+        assert!(!is_newer("", "0.1.0"));
+        assert!(!is_newer("v1.x.0", "0.1.0"));
+    }
+
+    #[test]
+    fn a_prerelease_compares_on_its_release_number() {
+        assert!(is_newer("v0.2.0-beta.1", "0.1.0"));
+        assert!(!is_newer("v0.1.0-beta.1", "0.1.0"));
     }
 }

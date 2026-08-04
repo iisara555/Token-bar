@@ -299,11 +299,81 @@ export function Settings() {
             </div>
           </section>
 
-          <div className="faint" style={{ fontSize: 11, textAlign: "center" }}>
-            Token Bar {view.version}
-          </div>
+          <UpdateFooter version={view.version} />
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * The version line, and the button that asks whether it is still the newest.
+ *
+ * Checking is a button rather than something that happens on every launch. This
+ * app's whole premise is that it does not spend the user's attention without a
+ * reading to show for it, and a background check that phones GitHub on startup
+ * spends network and a request quota to usually learn nothing.
+ *
+ * It reports; it does not install. Installing in place means downloading and
+ * running a binary, and doing that safely needs a signed update artifact — so
+ * until the signing key exists, the honest end of this flow is the releases
+ * page, where the user can see what they are downloading.
+ */
+function UpdateFooter({ version }: { version: string }) {
+  const [state, setState] = useState<
+    | { kind: "idle" }
+    | { kind: "checking" }
+    | { kind: "current" }
+    | { kind: "available"; latest: string }
+    | { kind: "failed"; message: string }
+  >({ kind: "idle" });
+
+  async function check() {
+    setState({ kind: "checking" });
+    try {
+      const result = await api.checkForUpdate();
+      if (result.available && result.latest) {
+        setState({ kind: "available", latest: result.latest });
+      } else {
+        setState({ kind: "current" });
+      }
+    } catch (e) {
+      // Offline is the ordinary reason this fails, and it is not the user's
+      // problem to solve — say what happened and leave the button usable.
+      setState({ kind: "failed", message: String(e) });
+    }
+  }
+
+  return (
+    <div className="update-foot">
+      <span className="faint">Token Bar {version}</span>
+
+      {state.kind === "available" ? (
+        <button
+          type="button"
+          className="btn"
+          data-accent
+          onClick={() => void api.openReleasesPage()}
+        >
+          Download {state.latest}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="btn"
+          onClick={() => void check()}
+          disabled={state.kind === "checking"}
+        >
+          {state.kind === "checking" ? "Checking…" : "Check for updates"}
+        </button>
+      )}
+
+      {state.kind === "current" && <span className="faint">Up to date.</span>}
+      {state.kind === "failed" && (
+        <span className="faint">Could not reach GitHub.</span>
+      )}
     </div>
   );
 }

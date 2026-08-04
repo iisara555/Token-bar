@@ -4,6 +4,7 @@ import { authKind, readingsFor } from "../readings";
 import type { ProviderView, UsageSnapshot } from "../types";
 import { AlertIcon } from "./Icons";
 import { MeterBlock } from "./Meter";
+import { Sparkline } from "./Sparkline";
 
 interface DetailPanelProps {
   provider: ProviderView;
@@ -89,6 +90,14 @@ export function DetailPanel({ provider, snapshot, windowDays }: DetailPanelProps
           <span className="card-total-label">{secondary.label}</span>
           <span className="card-total-value num">{secondary.value}</span>
         </div>
+      )}
+
+      {/* Shape, under the totals it is the breakdown of. `caps.series` says
+          whether this provider reports history at all, so a provider that
+          simply has none is not given an empty frame that reads as "no spend"
+          rather than "not reported". */}
+      {provider.caps.series && snapshot?.series && (
+        <Sparkline series={snapshot.series} windowDays={windowDays} />
       )}
 
       {t && totalTokens(t) > 0 && (

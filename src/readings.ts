@@ -1,7 +1,22 @@
 import type { Ramp } from "./components/Meter";
 import { money, resetAt, resetIn, resetInShort } from "./format";
-import { budgetCentsFor } from "./state/useUsage";
 import type { ProviderView, UsageSnapshot } from "./types";
+
+/**
+ * The budget a user typed into Settings, in cents.
+ *
+ * Lives here rather than in the store: it reads one field off a `ProviderView`
+ * and does arithmetic, which makes it part of turning a provider into a
+ * reading. Keeping it next to the zustand store meant this module — pure
+ * derivation over plain data — had to pull the store, the IPC layer and the
+ * demo fixtures in behind it.
+ */
+export function budgetCentsFor(p: ProviderView): number | null {
+  const raw = p.options["budget_usd"];
+  if (!raw) return null;
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
 
 /**
  * One row of the instrument panel.

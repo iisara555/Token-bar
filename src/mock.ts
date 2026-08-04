@@ -1,6 +1,7 @@
 import type {
   AppView,
   AuthMode,
+  Bucket,
   GlassPref,
   ProviderId,
   ProviderView,
@@ -188,11 +189,48 @@ const providers: ProviderView[] = providerSeed.map((provider) => ({
 const day = 86_400_000;
 const now = Date.now();
 
+/**
+ * A fortnight of plausible daily spend, oldest first.
+ *
+ * Shaped rather than random: a weekday rhythm with two quiet weekend days and
+ * one spike, because the sparkline exists to show exactly that difference and a
+ * flat line of noise would not tell anyone whether it works. Seeded from the
+ * index so the demo looks the same on every reload.
+ */
+function mockSeries(days: number, base: number): Bucket[] {
+  return Array.from({ length: days }, (_, i) => {
+    const weekday = new Date(now - (days - 1 - i) * day).getDay();
+    const quiet = weekday === 0 || weekday === 6;
+    const spike = i === days - 4;
+    const wobble = 0.75 + ((i * 37) % 50) / 100;
+    const cents = Math.round(base * wobble * (quiet ? 0.18 : 1) * (spike ? 2.6 : 1));
+    return {
+      start: new Date(now - (days - 1 - i) * day).toISOString(),
+      costCents: cents,
+      tokens: {
+        input: cents * 120,
+        output: cents * 28,
+        cacheRead: cents * 45,
+        cacheWrite: cents * 9,
+      },
+    };
+  });
+}
+
+const anthropicSeries = mockSeries(14, 240);
+const openaiSeries = mockSeries(14, 155);
+
+/** What Rust's `UsageSnapshot::summarize` guarantees: the headline cost is the
+ *  series added up. The demo has to hold that too, or it shows a total that
+ *  disagrees with the bars printed directly under it. */
+const seriesTotal = (series: Bucket[]) =>
+  series.reduce((sum, b) => sum + (b.costCents ?? 0), 0);
+
 const snapshots: UsageSnapshot[] = [
   {
     provider: "anthropic",
     status: "ok",
-    costCents: null,
+    costCents: seriesTotal(anthropicSeries),
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     balanceCents: null,
     limits: {
@@ -209,7 +247,7 @@ const snapshots: UsageSnapshot[] = [
         windowMinutes: 10_080,
       },
     },
-    series: [],
+    series: anthropicSeries,
     fetchedAt: new Date(now - 72_000).toISOString(),
     sourceLatencySecs: 3600,
     message: null,
@@ -217,7 +255,7 @@ const snapshots: UsageSnapshot[] = [
   {
     provider: "openai",
     status: "ok",
-    costCents: null,
+    costCents: seriesTotal(openaiSeries),
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     balanceCents: null,
     limits: {
@@ -234,7 +272,7 @@ const snapshots: UsageSnapshot[] = [
         windowMinutes: 10_080,
       },
     },
-    series: [],
+    series: openaiSeries,
     fetchedAt: new Date(now - 105_000).toISOString(),
     sourceLatencySecs: 300,
     message: null,
@@ -305,8 +343,16 @@ function persist() {
 
 export const mockApi = {
   appView: async () => copy(view),
-  snapshots: async () => copy(view.snapshots),
   noop: async () => undefined,
+
+  // The demo build is always current: an update banner in a browser tab would
+  // be offering a download that has nothing to do with what is running.
+  checkForUpdate: async () => ({
+    current: view.version,
+    latest: view.version,
+    available: false,
+  }),
+  openReleasesPage: async () => undefined,
 
   async refresh(provider?: ProviderId) {
     const targets = provider

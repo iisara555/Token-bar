@@ -9,8 +9,17 @@ name: Build
 on:
   push:
     branches: [main]
+    # A version tag is what turns a build into a published release. Pushing
+    # `v0.2.0` is the whole release procedure; an ordinary push to main still
+    # builds and still uploads artifacts, it just does not publish.
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
+
+# Creating a release means writing to the repository, which the default
+# read-only token cannot do.
+permissions:
+  contents: write
 
 concurrency:
   group: build-${{ github.ref }}
@@ -65,6 +74,11 @@ jobs:
       - name: Type-check and build the frontend
         run: npm run build
 
+      # Cheap, and they fail for the same reasons the Rust tests do, so they
+      # belong on the same side of the gate rather than in the advisory job.
+      - name: Test the frontend
+        run: npm test
+
       - name: Test
         working-directory: src-tauri
         run: cargo test
@@ -92,6 +106,11 @@ jobs:
           ANTIGRAVITY_CLIENT_SECRET: ${{ secrets.ANTIGRAVITY_CLIENT_SECRET }}
         with:
           args: ${{ matrix.args }}
+          # Empty on an ordinary push, which is how tauri-action is told not to
+          # publish anything. See the note on the ad-hoc step below.
+          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Token Bar {0}', github.ref_name) || '' }}
+          releaseDraft: false
 
       - name: Build the installers (ad-hoc signature)
         if: env.HAS_APPLE_CERT != 'true'
@@ -108,6 +127,17 @@ jobs:
           ANTIGRAVITY_CLIENT_SECRET: ${{ secrets.ANTIGRAVITY_CLIENT_SECRET }}
         with:
           args: ${{ matrix.args }}
+          # A release is published only from a `v*` tag. On every other push
+          # these are empty strings, which is tauri-action's own signal to build
+          # without publishing — so an ordinary merge to main still gets its
+          # installers as run artifacts and nothing appears under Releases.
+          #
+          # Both matrix legs name the same tag on purpose: the first to finish
+          # creates the release and the second uploads its installer alongside,
+          # so one release ends up carrying both the .dmg and the .exe.
+          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && format('Token Bar {0}', github.ref_name) || '' }}
+          releaseDraft: false
 
       - name: Confirm the macOS bundle is signed
         if: runner.os == 'macOS'
@@ -153,6 +183,8 @@ jobs:
           workspaces: src-tauri -> target
           key: lint
       - run: npm ci
+      - name: ESLint
+        run: npm run lint
       # tauri::generate_context! reads ../dist, so the frontend has to exist
       # before anything can typecheck the Rust side.
       - run: npm run build

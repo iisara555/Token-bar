@@ -52,6 +52,22 @@ was purchased, and an account with a budget you set shows what is left of it. A
 provider with nothing to report says so rather than being given an empty meter,
 which would read as "zero left" instead of "no data".
 
+Opening a provider's card also shows its **daily spend** as a row of bars, for
+the providers that report history. Bars rather than a line: each day is a closed
+bucket with a total, and the gap between two of them is not a slope anyone
+should read. There is no axis and no per-bar figure — the card already prints
+the period total, and what the row adds is shape, which is the answer to "was it
+steady, or was it one bad Tuesday".
+
+**Notifications** fire when a provider crosses a threshold: the warning fraction
+you set, and then the ceiling itself. They are edge-triggered. A provider that
+is over budget stays over budget for the rest of the window, and a notification
+on every poll would turn the one message worth reading into noise that gets
+silenced — after which the feature is worse than not having it. An alarm fires
+on the crossing, and the level has to fall back before that provider can raise
+it again. A rate-limit window outranks a budget, because it is the ceiling that
+actually stops work.
+
 [bitcount]: https://github.com/petrvanblokland/TYPETR-Bitcount
 
 ## UI preview
@@ -87,6 +103,33 @@ The generated application icons live in `src-tauri/icons`; edit
 `src-tauri/app-icon.svg` and run `npx tauri icon src-tauri/app-icon.svg` to
 regenerate them.
 
+### Checks
+
+```sh
+npm run lint     # ESLint over the webview half
+npm test         # Vitest: formatting and reading derivation
+npm run build    # tsc --noEmit, then the production bundle
+cd src-tauri && cargo test && cargo clippy --all-targets && cargo fmt --check
+```
+
+CI runs all of these. The Rust and frontend tests gate the installers; ESLint,
+Clippy and `cargo fmt` run in a separate advisory job, so a lint regression is
+visible without also withholding a build.
+
+### Logs
+
+Release builds set `windows_subsystem = "windows"` so the toolbar does not drag
+a console around behind it, which also means they have no stderr to log to. The
+log therefore goes to a file, capped at 512 KB and rotated:
+
+| | |
+|---|---|
+| Windows | `%APPDATA%\com.tokenbar.app\logs\token-bar.log` |
+| macOS | `~/Library/Logs/com.tokenbar.app/token-bar.log` |
+
+That file is where a provider stuck on `Error` explains itself. Keys are
+redacted before anything is written — see `providers::redact`.
+
 ## Installers
 
 `.github/workflows/build.yml` builds both installers on every push and attaches
@@ -106,6 +149,27 @@ Download them from the **Actions** tab, or:
 gh run download --name token-bar-windows-exe
 gh run download --name token-bar-macos-dmg
 ```
+
+### Publishing a release
+
+Pushing a `v*` tag is the whole procedure. The same workflow then publishes a
+GitHub Release and attaches both installers to it, so a download no longer
+requires a GitHub login and the Actions tab:
+
+```sh
+npm version 0.2.0 --no-git-tag-version   # keep package.json in step
+# and the same number in src-tauri/Cargo.toml and src-tauri/tauri.conf.json
+git commit -am "Release 0.2.0" && git tag v0.2.0
+git push origin main --tags
+```
+
+An ordinary push to `main` still builds and still uploads run artifacts; it
+just does not publish. **Settings → Check for updates** compares the running
+version against the newest published tag and, when there is a newer one, offers
+the releases page. It reports rather than installing: installing in place needs
+a signed update artifact and a private signing key held outside this
+repository, and an updater that downloads and runs an unsigned binary is worse
+than a button that shows you what you are about to download.
 
 ### Opening the macOS build
 

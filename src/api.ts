@@ -12,6 +12,7 @@ import type {
   GlassMode,
   GlassPref,
   ProviderId,
+  UpdateCheck,
   UsageSnapshot,
 } from "./types";
 
@@ -29,7 +30,6 @@ function run<T>(
 
 export const api = {
   appView: () => run<AppView>("get_app_view", undefined, mockApi.appView),
-  snapshots: () => run<UsageSnapshot[]>("get_snapshots", undefined, mockApi.snapshots),
   refresh: (provider?: ProviderId) =>
     run<void>("refresh", { provider: provider ?? null }, () => mockApi.refresh(provider)),
 
@@ -83,6 +83,11 @@ export const api = {
     isTauri() ? isAutostartEnabled() : mockApi.isAutostartEnabled(),
   setAutostart: (on: boolean) =>
     isTauri() ? (on ? enableAutostart() : disableAutostart()) : mockApi.setAutostart(on),
+
+  /** Asks GitHub, from Rust — the webview has no network reach of its own. */
+  checkForUpdate: () => run<UpdateCheck>("check_for_update", undefined, mockApi.checkForUpdate),
+  openReleasesPage: () =>
+    run<void>("open_releases_page", undefined, mockApi.openReleasesPage),
 
   openSettings: () => run<void>("open_settings", undefined, mockApi.openSettings),
   openProviderLink: (provider: ProviderId) =>
