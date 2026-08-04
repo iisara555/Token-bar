@@ -83,20 +83,26 @@
 .bar-divider {
   width: 1px;
   align-self: center;
-  height: 26px;
+  height: 22px;
   background: var(--hairline);
   flex: none;
 }
 
 /* --------------------------------- chips ---------------------------------- */
 
+/* Vertical padding is half the horizontal here, and deliberately so. The bar is
+   a strip whose height is the thing it costs the screen all day, so room spent
+   above and below a reading is charged at a different rate from room spent
+   beside it: widening the chip pushes the next provider along a row that is
+   mostly empty anyway, while heightening it pushes every window on the desktop
+   down. --space-2 on both axes was the chip treating the two as the same. */
 .chip {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-chip);
-  margin: var(--space-1) 2px;
+  margin: 2px;
 }
 .chip:hover {
   background: var(--layer);
@@ -109,7 +115,7 @@
    the status text goes to the tooltip and the card instead of the row. */
 .chip[data-bare] {
   gap: 0;
-  padding: var(--space-2);
+  padding: var(--space-1) var(--space-2);
 }
 
 .chip-mark {
@@ -161,10 +167,14 @@
   background: var(--text-faint);
 }
 
+/* 2px, which is below the spacing scale and is the point: this is not a gap
+   between two things, it is the gutter between two rows of one instrument. The
+   scale's smallest step separates elements; a stacked pair of meters wants to
+   read as a single block that happens to have two lines in it. */
 .chip-meters {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 2px;
   min-width: 0;
 }
 
@@ -209,12 +219,20 @@
    value off the track's length — the number is right beside it — so the track's
    whole job is to say "roughly this full" at a glance. 76px still resolves a
    few percent, and the 42px it gives back is per provider, so a five-provider
-   bar is over 200px narrower. */
+   bar is over 200px narrower.
+
+   Height is not the reading either way. A track carries its value entirely in
+   how far the fill runs, so every pixel of thickness is spent on legibility
+   alone — and past the point where the ramp is unmistakably a ramp, thickness
+   buys nothing while costing bar height, the one dimension this app pays for
+   continuously. 5px still resolves the gradient and still reads as a bar
+   rather than a rule; the 2px it gives back is per row, and a provider showing
+   both its windows stacks two of them. */
 .meter-track {
   position: relative;
   display: block;
   width: 76px;
-  height: 7px;
+  height: 5px;
   border-radius: var(--radius-pill);
   background: var(--meter-track);
   overflow: hidden;
@@ -272,7 +290,7 @@
 }
 .bar[data-compact="true"] .meter-track {
   width: 46px;
-  height: 6px;
+  height: 4px;
 }
 .bar[data-compact="true"] .chip {
   padding: var(--space-1) var(--space-2);
@@ -412,9 +430,12 @@
   letter-spacing: 0.01em;
 }
 
+/* Twice the bar's track, as it was at 7/14. The ratio is what makes the card
+   read as the same instrument leaned into rather than a second one, so the two
+   heights move together or neither does. */
 .meter-track--lg {
   width: 100%;
-  height: 14px;
+  height: 10px;
 }
 
 /* The graduation, printed on the face below the track rather than etched over
