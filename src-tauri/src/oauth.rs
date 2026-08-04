@@ -504,9 +504,9 @@ fn read_antigravity_tokens() -> Result<AntigravityTokens, ProviderError> {
 fn write_antigravity_tokens(tokens: &AntigravityTokens) -> Result<(), ProviderError> {
     let json = serde_json::to_string(tokens)
         .map_err(|_| ProviderError::Oauth("Antigravity credentials could not be saved".into()))?;
-    antigravity_entry()?
-        .set_password(&json)
-        .map_err(|e| ProviderError::Oauth(format!("Antigravity credentials could not be saved: {e}")))
+    antigravity_entry()?.set_password(&json).map_err(|e| {
+        ProviderError::Oauth(format!("Antigravity credentials could not be saved: {e}"))
+    })
 }
 
 async fn antigravity_credential_async(
@@ -631,8 +631,9 @@ async fn run_loopback_login(
     challenge: &str,
     state: &str,
 ) -> Result<LoopbackCode, ProviderError> {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")
-        .map_err(|e| ProviderError::Oauth(format!("could not open a local port for sign-in: {e}")))?;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| {
+        ProviderError::Oauth(format!("could not open a local port for sign-in: {e}"))
+    })?;
     listener
         .set_nonblocking(true)
         .map_err(|e| ProviderError::Oauth(format!("could not prepare the local port: {e}")))?;
@@ -654,7 +655,12 @@ async fn run_loopback_login(
     Ok(LoopbackCode { code, redirect_uri })
 }
 
-fn build_authorize_url(client_id: &str, redirect_uri: &str, challenge: &str, state: &str) -> String {
+fn build_authorize_url(
+    client_id: &str,
+    redirect_uri: &str,
+    challenge: &str,
+    state: &str,
+) -> String {
     format!(
         "{ANTIGRAVITY_AUTH_URL}?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code\
          &scope={scope}&code_challenge={challenge}&code_challenge_method=S256\
@@ -707,12 +713,13 @@ fn accept_callback(
                 let _ = stream.flush();
 
                 if let Some(err) = params.get("error") {
-                    return Err(ProviderError::Oauth(format!("Google sign-in was cancelled ({err})")));
+                    return Err(ProviderError::Oauth(format!(
+                        "Google sign-in was cancelled ({err})"
+                    )));
                 }
-                let code = params
-                    .get("code")
-                    .cloned()
-                    .ok_or_else(|| ProviderError::Oauth("Google did not return a sign-in code".into()))?;
+                let code = params.get("code").cloned().ok_or_else(|| {
+                    ProviderError::Oauth("Google did not return a sign-in code".into())
+                })?;
                 if params.get("state").map(String::as_str).unwrap_or("") != expected_state {
                     return Err(ProviderError::Oauth(
                         "sign-in response did not match this request".into(),
@@ -722,11 +729,17 @@ fn accept_callback(
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 if Instant::now() >= deadline {
-                    return Err(ProviderError::Oauth("sign-in timed out — try Connect again".into()));
+                    return Err(ProviderError::Oauth(
+                        "sign-in timed out — try Connect again".into(),
+                    ));
                 }
                 std::thread::sleep(Duration::from_millis(200));
             }
-            Err(e) => return Err(ProviderError::Oauth(format!("local sign-in listener failed: {e}"))),
+            Err(e) => {
+                return Err(ProviderError::Oauth(format!(
+                    "local sign-in listener failed: {e}"
+                )))
+            }
         }
     }
 }
@@ -785,18 +798,16 @@ fn urldecode(input: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         match bytes[i] {
-            b'%' if i + 2 < bytes.len() => {
-                match u8::from_str_radix(&input[i + 1..i + 3], 16) {
-                    Ok(byte) => {
-                        out.push(byte);
-                        i += 3;
-                    }
-                    Err(_) => {
-                        out.push(bytes[i]);
-                        i += 1;
-                    }
+            b'%' if i + 2 < bytes.len() => match u8::from_str_radix(&input[i + 1..i + 3], 16) {
+                Ok(byte) => {
+                    out.push(byte);
+                    i += 3;
                 }
-            }
+                Err(_) => {
+                    out.push(bytes[i]);
+                    i += 1;
+                }
+            },
             b'+' => {
                 out.push(b' ');
                 i += 1;
@@ -1026,7 +1037,9 @@ mod tests {
         let b = pkce_verifier();
         assert_ne!(a, b);
         assert!(a.len() >= 43, "{a}");
-        assert!(a.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+        assert!(a
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
     }
 
     #[test]
