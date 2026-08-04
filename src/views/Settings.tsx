@@ -286,12 +286,15 @@ export function Settings() {
                 OAuth reads the existing <strong>Claude Code, Codex or Kimi Code login</strong>{" "}
                 directly each time. Expired Claude Code access tokens are refreshed through
                 Anthropic and the rotated pair is saved back to that official credentials file.
-                The Link buttons open the provider page in Chrome; Token Bar never reads or copies
-                Chrome cookies. API keys are stored in the <strong>{credentialStoreName}</strong>{" "}
-                under <code>com.tokenbar.app</code>, never in a config file and never in this
-                window — once saved, only the Rust process can read them, and it sends
-                them nowhere but the provider&rsquo;s own API. Removing a key here deletes
-                it from the credential store.
+                Antigravity has no existing login to read, so its Connect button runs a Google
+                sign-in of Token Bar&rsquo;s own; the resulting token is kept apart from API keys,
+                under its own entry in the <strong>{credentialStoreName}</strong>. The Link
+                buttons open the provider page in Chrome; Token Bar never reads or copies Chrome
+                cookies. API keys are stored in the <strong>{credentialStoreName}</strong> under{" "}
+                <code>com.tokenbar.app</code>, never in a config file and never in this window —
+                once saved, only the Rust process can read them, and it sends them nowhere but the
+                provider&rsquo;s own API. Removing a key here deletes it from the credential
+                store.
               </p>
             </div>
           </section>
@@ -317,12 +320,36 @@ function ProviderRow({
   const [open, setOpen] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   const saveKey = async () => {
     if (!keyDraft.trim()) return;
     try {
       await api.saveKey(provider.id, keyDraft);
       setKeyDraft("");
+      setError(null);
+      await onChanged();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const connectAntigravity = async () => {
+    setConnecting(true);
+    setError(null);
+    try {
+      await api.antigravityLogin();
+      await onChanged();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const disconnectAntigravity = async () => {
+    try {
+      await api.antigravityLogout();
       setError(null);
       await onChanged();
     } catch (e) {
@@ -382,7 +409,7 @@ function ProviderRow({
 
       {open && (
         <div className="provider-detail">
-          {provider.oauthStatus !== null && (
+          {provider.oauthStatus !== null && provider.id !== "antigravity" && (
             <div className="auth-choice">
               <div>
                 <div className="field-label">Authentication</div>
@@ -420,6 +447,42 @@ function ProviderRow({
             <div className="notice">
               Link opens Kimi Code in Chrome. After signing in with Kimi Code, choose OAuth here
               and refresh to read the five-hour and weekly plan windows.
+            </div>
+          )}
+
+          {provider.id === "antigravity" && (
+            <div className="field">
+              <div>
+                <div className="field-label">Google account</div>
+                <div className="field-hint">
+                  Connect opens a Google sign-in in your browser. This is Token Bar&rsquo;s own
+                  login, separate from a Gemini API key and from Antigravity&rsquo;s own login on
+                  this PC — the token is kept in the{" "}
+                  {detectOs() === "macos" ? "macOS Keychain" : "system credential store"} and used
+                  only to read your quota. Antigravity publishes no usage API, so the reading
+                  comes from the same undocumented endpoint Antigravity itself calls and may break
+                  if Google changes it.
+                </div>
+              </div>
+              {provider.oauthStatus === "connected" ? (
+                <button
+                  type="button"
+                  className="btn"
+                  data-tone="danger"
+                  onClick={() => void disconnectAntigravity()}
+                >
+                  Disconnect
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={connecting}
+                  onClick={() => void connectAntigravity()}
+                >
+                  {connecting ? "Waiting for Google…" : "Connect Google account"}
+                </button>
+              )}
             </div>
           )}
 
@@ -511,6 +574,9 @@ function describe(p: ProviderView): string {
   if (p.id === "kimi") {
     return `Kimi Code OAuth/API key · 5-hour + weekly limits · every ${pollEvery(p)}`;
   }
+  if (p.id === "antigravity") {
+    return `Google OAuth · model quota, reverse-engineered · every ${pollEvery(p)}`;
+  }
   if (p.id === "zai" || p.id === "minimax") {
     return `Plan quota · 5-hour + weekly limits · every ${pollEvery(p)}`;
   }
@@ -538,6 +604,11 @@ function oauthStatusTitle(p: ProviderView): string {
 }
 
 function oauthStatusHelp(p: ProviderView): string {
+  if (p.id === "antigravity") {
+    return p.oauthStatus === "connected"
+      ? "Connected with Token Bar's own Google sign-in."
+      : "Use Connect below to sign in again.";
+  }
   const client = p.id === "anthropic" ? "Claude Code" : p.id === "kimi" ? "Kimi Code" : "Codex";
   if (p.oauthStatus === "connected") {
     return `Using the existing ${client} login on this PC. The token remains owned by ${client}.`;

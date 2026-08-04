@@ -36,6 +36,10 @@ chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
 rand = "0.8"
 secrecy = "0.10"
+# PKCE for the Antigravity OAuth login: a code_verifier/code_challenge pair,
+# nothing that needs a full crypto toolkit.
+sha2 = "0.10"
+base64 = "0.22"
 # The backend is chosen per target below. Enabling `windows-native` on a Mac
 # build does not fail loudly — keyring silently falls back to an in-memory store
 # that forgets every key on quit, so this has to be right rather than merely

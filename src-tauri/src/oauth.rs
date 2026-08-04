@@ -1,15 +1,29 @@
-//! Bridge to official Claude Code, Codex and Kimi Code OAuth sessions.
+//! Bridge to official Claude Code, Codex and Kimi Code OAuth sessions — and,
+//! for Antigravity, a login Token Bar performs itself.
 //!
 //! Credentials are re-read from the official client files on every poll. When
 //! Claude Code's short-lived access token has expired, Token Bar uses the
 //! refresh token through Anthropic's OAuth endpoint and writes the rotated pair
 //! back to the same official file so Claude Code and Token Bar share the login.
+//!
+//! Antigravity has no official client file to read: it is a separate Google
+//! account login with its own OAuth client, so Token Bar runs its own PKCE
+//! sign-in (`antigravity_login`) and keeps the resulting refresh token in the
+//! OS credential store under a service name of its own — never under the
+//! `com.tokenbar.app` service `secrets.rs` uses for pasted API keys, so it
+//! never shows up as a garbled "fingerprint" in Settings.
 
+use base64::Engine;
 use chrono::{TimeZone, Utc};
+use keyring::Entry;
+use rand::RngCore;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
 use crate::config::AuthMode;
@@ -31,13 +45,18 @@ pub struct OAuthCredential {
 pub fn supports(id: ProviderId) -> bool {
     matches!(
         id,
-        ProviderId::Anthropic | ProviderId::Openai | ProviderId::Kimi
+        ProviderId::Anthropic | ProviderId::Openai | ProviderId::Kimi | ProviderId::Antigravity
     )
 }
 
 pub fn should_use(id: ProviderId, mode: AuthMode) -> bool {
     if !supports(id) {
         return false;
+    }
+    // Antigravity has no API-key fallback to opt into — Auto/OAuth/ApiKey all
+    // mean the same thing: use the login if one is connected.
+    if id == ProviderId::Antigravity {
+        return status(id) != OAuthStatus::NotFound;
     }
     match mode {
         AuthMode::Oauth => true,
@@ -99,6 +118,14 @@ pub fn status(id: ProviderId) -> OAuthStatus {
             }
             _ => OAuthStatus::NotFound,
         },
+        // Google's access tokens expire hourly by design and refresh silently;
+        // unlike Claude Code there is no separate file another process could
+        // have already refreshed, so — like Codex — the only local signal
+        // worth showing is whether a login was ever completed.
+        ProviderId::Antigravity => match read_antigravity_tokens() {
+            Ok(tokens) if !tokens.refresh_token.trim().is_empty() => OAuthStatus::Connected,
+            _ => OAuthStatus::NotFound,
+        },
         _ => OAuthStatus::NotFound,
     }
 }
@@ -108,6 +135,9 @@ pub fn credential(id: ProviderId) -> Result<OAuthCredential, ProviderError> {
         ProviderId::Anthropic => claude_credential(),
         ProviderId::Openai => codex_credential(),
         ProviderId::Kimi => kimi_credential(),
+        ProviderId::Antigravity => Err(ProviderError::Config(
+            "Antigravity requires the async OAuth path".into(),
+        )),
         _ => Err(ProviderError::Config(
             "OAuth is not supported for this provider".into(),
         )),
@@ -122,10 +152,10 @@ pub async fn credential_async(
     client: &reqwest::Client,
     force_refresh: bool,
 ) -> Result<OAuthCredential, ProviderError> {
-    if id == ProviderId::Anthropic {
-        claude_credential_async(client, force_refresh).await
-    } else {
-        credential(id)
+    match id {
+        ProviderId::Anthropic => claude_credential_async(client, force_refresh).await,
+        ProviderId::Antigravity => antigravity_credential_async(client, force_refresh).await,
+        _ => credential(id),
     }
 }
 
@@ -392,6 +422,407 @@ fn codex_credential() -> Result<OAuthCredential, ProviderError> {
     })
 }
 
+// ---------------------------------------------------------------------------
+// Antigravity — Token Bar's own Google OAuth login
+// ---------------------------------------------------------------------------
+//
+// Unlike Claude Code/Codex/Kimi Code, there is no existing official client
+// login to read: Antigravity is a Google account sign-in with its own OAuth
+// client, so Token Bar runs the PKCE dance itself via a loopback redirect and
+// keeps the refresh token in the OS credential store.
+//
+// The client id and secret are read from the environment rather than
+// compiled in: they are Google's identifier and secret for a real registered
+// OAuth client, and while an "installed application" client secret is not
+// confidential the way an API key is, it is still a credential issued to
+// someone else's Google Cloud project, not one this app is entitled to
+// redistribute inside its own published source. A packager sets
+// `ANTIGRAVITY_CLIENT_ID`/`ANTIGRAVITY_CLIENT_SECRET` at build or launch time
+// — see README for what to put there.
+
+const ANTIGRAVITY_SERVICE: &str = "com.tokenbar.app.oauth";
+const ANTIGRAVITY_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
+const ANTIGRAVITY_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+const ANTIGRAVITY_SCOPES: &str = "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cclog https://www.googleapis.com/auth/experimentsandconfigs";
+/// How long the local loopback server waits for the browser round trip before
+/// giving up and telling the user to try again.
+const LOGIN_TIMEOUT: Duration = Duration::from_secs(180);
+
+#[derive(Serialize, Deserialize)]
+struct AntigravityTokens {
+    access_token: String,
+    refresh_token: String,
+    /// Milliseconds since epoch, matching how the Claude credential file
+    /// already spells expiry in this module.
+    expires_at: i64,
+}
+
+#[derive(Deserialize)]
+struct GoogleTokenResponse {
+    access_token: String,
+    #[serde(default)]
+    refresh_token: Option<String>,
+    #[serde(default)]
+    expires_in: Option<i64>,
+}
+
+const ANTIGRAVITY_NOT_CONFIGURED: &str =
+    "Antigravity needs ANTIGRAVITY_CLIENT_ID and ANTIGRAVITY_CLIENT_SECRET set for this build — see README";
+
+/// Baked in by the release build (see `.github/workflows/build.yml`, same
+/// pattern as the `APPLE_*` signing secrets) when the repository has one
+/// configured, with a runtime env var as a fallback for `cargo tauri dev`.
+fn antigravity_client_id() -> Result<String, ProviderError> {
+    option_env!("ANTIGRAVITY_CLIENT_ID")
+        .map(str::to_string)
+        .or_else(|| std::env::var("ANTIGRAVITY_CLIENT_ID").ok())
+        .filter(|v| !v.trim().is_empty())
+        .ok_or_else(|| ProviderError::Config(ANTIGRAVITY_NOT_CONFIGURED.into()))
+}
+
+fn antigravity_client_secret() -> Result<String, ProviderError> {
+    option_env!("ANTIGRAVITY_CLIENT_SECRET")
+        .map(str::to_string)
+        .or_else(|| std::env::var("ANTIGRAVITY_CLIENT_SECRET").ok())
+        .filter(|v| !v.trim().is_empty())
+        .ok_or_else(|| ProviderError::Config(ANTIGRAVITY_NOT_CONFIGURED.into()))
+}
+
+fn antigravity_entry() -> Result<Entry, ProviderError> {
+    Entry::new(ANTIGRAVITY_SERVICE, "antigravity")
+        .map_err(|e| ProviderError::Oauth(format!("credential store unavailable: {e}")))
+}
+
+fn read_antigravity_tokens() -> Result<AntigravityTokens, ProviderError> {
+    let raw = antigravity_entry()?.get_password().map_err(|_| {
+        ProviderError::Oauth("Antigravity is not connected — use Connect in Settings".into())
+    })?;
+    serde_json::from_str(&raw)
+        .map_err(|_| ProviderError::Oauth("Antigravity credentials could not be read".into()))
+}
+
+fn write_antigravity_tokens(tokens: &AntigravityTokens) -> Result<(), ProviderError> {
+    let json = serde_json::to_string(tokens)
+        .map_err(|_| ProviderError::Oauth("Antigravity credentials could not be saved".into()))?;
+    antigravity_entry()?
+        .set_password(&json)
+        .map_err(|e| ProviderError::Oauth(format!("Antigravity credentials could not be saved: {e}")))
+}
+
+async fn antigravity_credential_async(
+    client: &reqwest::Client,
+    force_refresh: bool,
+) -> Result<OAuthCredential, ProviderError> {
+    let mut tokens = read_antigravity_tokens()?;
+    let expired = tokens.expires_at <= Utc::now().timestamp_millis();
+    if !force_refresh && !expired {
+        return Ok(OAuthCredential {
+            access_token: SecretString::from(tokens.access_token.clone()),
+            account_id: None,
+        });
+    }
+
+    let client_id = antigravity_client_id()?;
+    let client_secret = antigravity_client_secret()?;
+    let refreshed = google_token_request(
+        client,
+        &[
+            ("client_id", &client_id),
+            ("client_secret", &client_secret),
+            ("refresh_token", &tokens.refresh_token),
+            ("grant_type", "refresh_token"),
+        ],
+        "Antigravity token refresh failed; connect again in Settings",
+    )
+    .await?;
+
+    tokens.access_token = refreshed.access_token;
+    tokens.expires_at = Utc::now().timestamp_millis() + refreshed.expires_in.unwrap_or(3600) * 1000;
+    if let Some(refresh_token) = refreshed.refresh_token {
+        tokens.refresh_token = refresh_token;
+    }
+    write_antigravity_tokens(&tokens)?;
+
+    Ok(OAuthCredential {
+        access_token: SecretString::from(tokens.access_token),
+        account_id: None,
+    })
+}
+
+async fn google_token_request(
+    client: &reqwest::Client,
+    form: &[(&str, &str)],
+    failure_message: &str,
+) -> Result<GoogleTokenResponse, ProviderError> {
+    let resp = client
+        .post(ANTIGRAVITY_TOKEN_URL)
+        .form(form)
+        .send()
+        .await
+        .map_err(|_| ProviderError::Oauth(failure_message.to_string()))?;
+    if !resp.status().is_success() {
+        return Err(ProviderError::Oauth(failure_message.to_string()));
+    }
+    resp.json()
+        .await
+        .map_err(|_| ProviderError::Oauth("Google returned an unexpected sign-in response".into()))
+}
+
+/// Run the interactive PKCE sign-in: open the system browser, wait for the
+/// loopback redirect, exchange the code, and store the resulting refresh
+/// token. Returns once the login is usable — the caller (a Tauri command)
+/// nudges the scheduler afterwards so the bar picks it up immediately.
+pub async fn antigravity_login(client: &reqwest::Client) -> Result<(), ProviderError> {
+    let client_id = antigravity_client_id()?;
+    let client_secret = antigravity_client_secret()?;
+
+    let verifier = pkce_verifier();
+    let challenge = pkce_challenge(&verifier);
+    let state = random_url_safe(16);
+
+    let code = run_loopback_login(&client_id, &challenge, &state).await?;
+
+    let token = google_token_request(
+        client,
+        &[
+            ("client_id", &client_id),
+            ("client_secret", &client_secret),
+            ("code", &code.code),
+            ("code_verifier", &verifier),
+            ("redirect_uri", &code.redirect_uri),
+            ("grant_type", "authorization_code"),
+        ],
+        "Google rejected the sign-in; try Connect again",
+    )
+    .await?;
+
+    let refresh_token = token.refresh_token.ok_or_else(|| {
+        ProviderError::Oauth(
+            "Google did not return a refresh token — remove Token Bar's access at \
+             myaccount.google.com/permissions and try Connect again"
+                .into(),
+        )
+    })?;
+
+    write_antigravity_tokens(&AntigravityTokens {
+        access_token: token.access_token,
+        refresh_token,
+        expires_at: Utc::now().timestamp_millis() + token.expires_in.unwrap_or(3600) * 1000,
+    })
+}
+
+pub fn antigravity_logout() -> Result<(), ProviderError> {
+    match antigravity_entry()?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(ProviderError::Oauth(format!("could not disconnect: {e}"))),
+    }
+}
+
+struct LoopbackCode {
+    code: String,
+    redirect_uri: String,
+}
+
+/// Bind a local port, open the consent screen with it as the redirect target,
+/// and block (off the async runtime) for the single callback request the
+/// browser makes when the user finishes signing in.
+async fn run_loopback_login(
+    client_id: &str,
+    challenge: &str,
+    state: &str,
+) -> Result<LoopbackCode, ProviderError> {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| ProviderError::Oauth(format!("could not open a local port for sign-in: {e}")))?;
+    listener
+        .set_nonblocking(true)
+        .map_err(|e| ProviderError::Oauth(format!("could not prepare the local port: {e}")))?;
+    let port = listener
+        .local_addr()
+        .map_err(|e| ProviderError::Oauth(e.to_string()))?
+        .port();
+    let redirect_uri = format!("http://localhost:{port}/oauth-callback");
+
+    let auth_url = build_authorize_url(client_id, &redirect_uri, challenge, state);
+    open_browser(&auth_url)
+        .map_err(|e| ProviderError::Oauth(format!("could not open a browser: {e}")))?;
+
+    let expected_state = state.to_string();
+    let code = tokio::task::spawn_blocking(move || accept_callback(listener, &expected_state))
+        .await
+        .map_err(|_| ProviderError::Oauth("sign-in was interrupted".into()))??;
+
+    Ok(LoopbackCode { code, redirect_uri })
+}
+
+fn build_authorize_url(client_id: &str, redirect_uri: &str, challenge: &str, state: &str) -> String {
+    format!(
+        "{ANTIGRAVITY_AUTH_URL}?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code\
+         &scope={scope}&code_challenge={challenge}&code_challenge_method=S256\
+         &access_type=offline&prompt=consent&state={state}",
+        client_id = urlencode(client_id),
+        redirect_uri = urlencode(redirect_uri),
+        scope = urlencode(ANTIGRAVITY_SCOPES),
+        challenge = urlencode(challenge),
+        state = urlencode(state),
+    )
+}
+
+/// Poll a non-blocking accept for up to [`LOGIN_TIMEOUT`], reply to the
+/// browser with a page it can be closed from, and hand back the `code` query
+/// parameter. Runs inside `spawn_blocking` — this is plain blocking I/O.
+fn accept_callback(
+    listener: std::net::TcpListener,
+    expected_state: &str,
+) -> Result<String, ProviderError> {
+    let deadline = Instant::now() + LOGIN_TIMEOUT;
+    loop {
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+                let mut buf = [0u8; 4096];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]);
+                let path = request
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or("");
+                let query = path.split_once('?').map(|(_, q)| q).unwrap_or("");
+                let params = parse_query(query);
+
+                let ok = params.contains_key("code");
+                let body = if ok {
+                    "<html><body>Signed in. You can close this tab and return to Token Bar.</body></html>"
+                } else {
+                    "<html><body>Sign-in did not complete. You can close this tab.</body></html>"
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+
+                if let Some(err) = params.get("error") {
+                    return Err(ProviderError::Oauth(format!("Google sign-in was cancelled ({err})")));
+                }
+                let code = params
+                    .get("code")
+                    .cloned()
+                    .ok_or_else(|| ProviderError::Oauth("Google did not return a sign-in code".into()))?;
+                if params.get("state").map(String::as_str).unwrap_or("") != expected_state {
+                    return Err(ProviderError::Oauth(
+                        "sign-in response did not match this request".into(),
+                    ));
+                }
+                return Ok(code);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    return Err(ProviderError::Oauth("sign-in timed out — try Connect again".into()));
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            Err(e) => return Err(ProviderError::Oauth(format!("local sign-in listener failed: {e}"))),
+        }
+    }
+}
+
+fn open_browser(url: &str) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(url).spawn()?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "", url])
+            .spawn()?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open").arg(url).spawn()?;
+    }
+    Ok(())
+}
+
+fn pkce_verifier() -> String {
+    let mut bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn pkce_challenge(verifier: &str) -> String {
+    let digest = Sha256::digest(verifier.as_bytes());
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest)
+}
+
+fn random_url_safe(len: usize) -> String {
+    let mut bytes = vec![0u8; len];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn urlencode(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for byte in input.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char);
+            }
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
+fn urldecode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                match u8::from_str_radix(&input[i + 1..i + 3], 16) {
+                    Ok(byte) => {
+                        out.push(byte);
+                        i += 3;
+                    }
+                    Err(_) => {
+                        out.push(bytes[i]);
+                        i += 1;
+                    }
+                }
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn parse_query(query: &str) -> std::collections::HashMap<String, String> {
+    query
+        .split('&')
+        .filter(|s| !s.is_empty())
+        .filter_map(|pair| {
+            let mut it = pair.splitn(2, '=');
+            let k = it.next()?;
+            let v = it.next().unwrap_or("");
+            Some((urldecode(k), urldecode(v)))
+        })
+        .collect()
+}
+
 fn read_claude_file() -> Result<ClaudeCredentials, std::io::Error> {
     let raw = std::fs::read_to_string(claude_credentials_path()?)?;
     serde_json::from_str(&raw).map_err(std::io::Error::other)
@@ -576,5 +1007,71 @@ mod tests {
         .unwrap();
         assert_eq!(file.access_token, "secret");
         assert!(!kimi_expired(file.expires_at.unwrap()));
+    }
+
+    /// RFC 7636 Appendix B's worked example — the one place we can check the
+    /// PKCE math against a published answer instead of just our own code.
+    #[test]
+    fn pkce_challenge_matches_the_rfc_7636_test_vector() {
+        let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        assert_eq!(
+            pkce_challenge(verifier),
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        );
+    }
+
+    #[test]
+    fn pkce_verifier_is_url_safe_and_unique() {
+        let a = pkce_verifier();
+        let b = pkce_verifier();
+        assert_ne!(a, b);
+        assert!(a.len() >= 43, "{a}");
+        assert!(a.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+    }
+
+    #[test]
+    fn urlencode_round_trips_reserved_characters() {
+        let raw = "a b+c/d?e=f&g";
+        assert_eq!(urldecode(&urlencode(raw)), raw);
+    }
+
+    #[test]
+    fn parse_query_decodes_a_code_with_slashes_and_a_state() {
+        let params = parse_query("code=4%2F0Ab_c-d&state=xyz%3D%3D&scope=a%20b");
+        assert_eq!(params.get("code").map(String::as_str), Some("4/0Ab_c-d"));
+        assert_eq!(params.get("state").map(String::as_str), Some("xyz=="));
+        assert_eq!(params.get("scope").map(String::as_str), Some("a b"));
+    }
+
+    #[test]
+    fn authorize_url_asks_for_a_code_challenge_and_the_right_redirect() {
+        let url = build_authorize_url(
+            "test-client-id.apps.googleusercontent.com",
+            "http://localhost:54321/oauth-callback",
+            "chal",
+            "st",
+        );
+        assert!(url.starts_with(ANTIGRAVITY_AUTH_URL));
+        assert!(url.contains("code_challenge=chal"));
+        assert!(url.contains("code_challenge_method=S256"));
+        assert!(url.contains("redirect_uri=http%3A%2F%2Flocalhost%3A54321%2Foauth-callback"));
+        assert!(url.contains(&format!(
+            "client_id={}",
+            urlencode("test-client-id.apps.googleusercontent.com")
+        )));
+    }
+
+    #[test]
+    fn antigravity_tokens_round_trip_through_json() {
+        let tokens = AntigravityTokens {
+            access_token: "at".into(),
+            refresh_token: "rt".into(),
+            expires_at: 123,
+        };
+        let json = serde_json::to_string(&tokens).unwrap();
+        let back: AntigravityTokens = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.access_token, "at");
+        assert_eq!(back.refresh_token, "rt");
+        assert_eq!(back.expires_at, 123);
     }
 }

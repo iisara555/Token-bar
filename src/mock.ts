@@ -72,6 +72,21 @@ const providerSeed: Array<
     options: {},
   },
   {
+    id: "antigravity",
+    name: "Antigravity",
+    enabled: false,
+    hasKey: false,
+    needsKey: false,
+    fingerprint: null,
+    authMode: "oauth",
+    usesOauth: false,
+    oauthStatus: "not_found",
+    caps: { cost: false, tokens: false, balance: false, series: false },
+    requiredOptions: [],
+    pollSeconds: 600,
+    options: {},
+  },
+  {
     id: "zai",
     name: "Z.AI",
     caps: { cost: false, tokens: false, balance: false, series: false },
@@ -144,6 +159,7 @@ const mockLinks: Partial<Record<ProviderId, [string, string]>> = {
   anthropic: ["https://claude.ai/settings", "Link Claude.ai"],
   openai: ["https://chatgpt.com/", "Link ChatGPT"],
   kimi: ["https://www.kimi.com/code", "Link Kimi"],
+  antigravity: ["https://antigravity.google/", "About Antigravity"],
   zai: ["https://z.ai/subscribe", "Open Z.AI"],
   minimax: ["https://platform.minimaxi.com/subscribe/token-plan", "Open MiniMax"],
   openrouter: ["https://openrouter.ai/settings/keys", "Open OpenRouter"],
@@ -351,6 +367,18 @@ export const mockApi = {
     changeProvider(provider, (item) => {
       item.hasKey = false;
       item.fingerprint = null;
+    });
+  },
+  async antigravityLogin() {
+    changeProvider("antigravity", (item) => {
+      item.oauthStatus = "connected";
+      item.usesOauth = true;
+    });
+  },
+  async antigravityLogout() {
+    changeProvider("antigravity", (item) => {
+      item.oauthStatus = "not_found";
+      item.usesOauth = false;
     });
   },
   async setClickThrough(on: boolean) {

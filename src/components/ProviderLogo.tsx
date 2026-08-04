@@ -1,4 +1,5 @@
 import anthropic from "@lobehub/icons-static-svg/icons/anthropic.svg";
+import antigravity from "@lobehub/icons-static-svg/icons/antigravity.svg";
 import deepseek from "@lobehub/icons-static-svg/icons/deepseek.svg";
 import gemini from "@lobehub/icons-static-svg/icons/gemini.svg";
 import groq from "@lobehub/icons-static-svg/icons/groq.svg";
@@ -16,6 +17,7 @@ const LOGO: Record<ProviderId, string> = {
   anthropic,
   openai,
   kimi,
+  antigravity,
   zai,
   minimax,
   openrouter,

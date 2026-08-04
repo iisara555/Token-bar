@@ -85,6 +85,11 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Baked into the binary via `option_env!` if set; Antigravity's
+          # Connect button reports a config error otherwise. Not committed to
+          # the repo — see README.
+          ANTIGRAVITY_CLIENT_ID: ${{ secrets.ANTIGRAVITY_CLIENT_ID }}
+          ANTIGRAVITY_CLIENT_SECRET: ${{ secrets.ANTIGRAVITY_CLIENT_SECRET }}
         with:
           args: ${{ matrix.args }}
 
@@ -99,6 +104,8 @@ jobs:
           # APPLE_* secrets and the step above takes over, signing with a real
           # Developer ID and notarising.
           APPLE_SIGNING_IDENTITY: "-"
+          ANTIGRAVITY_CLIENT_ID: ${{ secrets.ANTIGRAVITY_CLIENT_ID }}
+          ANTIGRAVITY_CLIENT_SECRET: ${{ secrets.ANTIGRAVITY_CLIENT_SECRET }}
         with:
           args: ${{ matrix.args }}
 

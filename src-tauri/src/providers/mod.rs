@@ -12,6 +12,7 @@ use std::fmt;
 use std::time::Duration;
 
 pub mod anthropic;
+pub mod antigravity;
 pub mod deepseek;
 pub mod gemini;
 pub mod groq;
@@ -42,6 +43,7 @@ pub enum ProviderId {
     Anthropic,
     Openai,
     Kimi,
+    Antigravity,
     Zai,
     Minimax,
     Openrouter,
@@ -53,10 +55,11 @@ pub enum ProviderId {
 }
 
 impl ProviderId {
-    pub const ALL: [ProviderId; 11] = [
+    pub const ALL: [ProviderId; 12] = [
         ProviderId::Anthropic,
         ProviderId::Openai,
         ProviderId::Kimi,
+        ProviderId::Antigravity,
         ProviderId::Zai,
         ProviderId::Minimax,
         ProviderId::Openrouter,
@@ -72,6 +75,7 @@ impl ProviderId {
             ProviderId::Anthropic => "anthropic",
             ProviderId::Openai => "openai",
             ProviderId::Kimi => "kimi",
+            ProviderId::Antigravity => "antigravity",
             ProviderId::Zai => "zai",
             ProviderId::Minimax => "minimax",
             ProviderId::Openrouter => "openrouter",
@@ -88,6 +92,7 @@ impl ProviderId {
             ProviderId::Anthropic => "Anthropic",
             ProviderId::Openai => "OpenAI",
             ProviderId::Kimi => "Kimi",
+            ProviderId::Antigravity => "Antigravity",
             ProviderId::Zai => "Z.AI",
             ProviderId::Minimax => "MiniMax",
             ProviderId::Openrouter => "OpenRouter",
@@ -449,6 +454,7 @@ pub fn provider_for(id: ProviderId) -> Box<dyn Provider> {
         ProviderId::Anthropic => Box::new(anthropic::Anthropic),
         ProviderId::Openai => Box::new(openai::OpenAi),
         ProviderId::Kimi => Box::new(kimi::Kimi),
+        ProviderId::Antigravity => Box::new(antigravity::Antigravity),
         ProviderId::Zai => Box::new(zai::Zai),
         ProviderId::Minimax => Box::new(minimax::MiniMax),
         ProviderId::Openrouter => Box::new(openrouter::OpenRouter),

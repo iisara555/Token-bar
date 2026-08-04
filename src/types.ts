@@ -4,6 +4,7 @@ export type ProviderId =
   | "anthropic"
   | "openai"
   | "kimi"
+  | "antigravity"
   | "zai"
   | "minimax"
   | "openrouter"
@@ -114,6 +115,7 @@ export const PROVIDER_ORDER: ProviderId[] = [
   "anthropic",
   "openai",
   "kimi",
+  "antigravity",
   "zai",
   "minimax",
   "openrouter",
