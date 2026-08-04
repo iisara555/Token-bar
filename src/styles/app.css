@@ -4,8 +4,10 @@
 
 .bar-root {
   /* Padding is shadow room. The window is transparent, so without it the
-     drop shadow would be clipped flat against the window edge. */
-  padding: 6px 10px 10px;
+     drop shadow would be clipped flat against the window edge. Sized to
+     --shadow: 8px down and 24px of blur needs less gutter than the 44px it
+     used to be, and the gutter is window width the bar pays for all day. */
+  padding: var(--space-1) var(--space-2) var(--space-3);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -18,12 +20,14 @@
    its size is a cost paid continuously. Everything here is tuned against that:
    the readings keep their weight, and the chrome around them gives up the room.
    The old padding scale (--space-4/5) was the one this file uses for *windows*,
-   which on a 40px-tall strip reads as slack rather than as breathing room. */
+   which on a 40px-tall strip reads as slack rather than as breathing room. The
+   leading edge is the one exception: it is the margin the wordmark sits in, and
+   that is a place where the row wants to start rather than to be crowded. */
 .bar {
   display: flex;
   align-items: stretch;
   width: max-content;
-  padding: 0 var(--space-1) 0 var(--space-3);
+  padding: 0 var(--space-1) 0 var(--space-4);
   flex: none;
 }
 
@@ -38,14 +42,20 @@
 /* A logotype at the head of a toolbar, not a page heading — --text-xl is the
    size this file gives a card's title, and at that weight the name outranked
    every reading beside it. Dropped to the readings' own size so the eye lands
-   on a number first and reads the name only when it goes looking for it. */
+   on a number first and reads the name only when it goes looking for it.
+
+   It does get room, though. The logotype had 12px to its left and 8px to its
+   right, so it sat closer to the rule than to the edge and read as crowded
+   against the first provider rather than as the head of the row. Equal margins
+   on both sides, and the divider reads as a separator instead of a boundary
+   the name is pressed up against. */
 .wordmark {
   align-self: center;
   font-size: var(--text-md);
   font-weight: var(--weight-medium);
   letter-spacing: 0.05em;
   white-space: nowrap;
-  padding-right: var(--space-2);
+  padding-right: var(--space-4);
   flex: none;
 }
 
@@ -86,16 +96,10 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-chip);
-  margin: 4px 2px;
-  transition:
-    background-color var(--dur) var(--ease),
-    transform var(--dur-fast) var(--ease);
+  margin: var(--space-1) 2px;
 }
 .chip:hover {
   background: var(--layer);
-}
-.chip:active {
-  transform: scale(0.985);
 }
 .chip[aria-expanded="true"] {
   background: var(--layer-hover);
@@ -160,7 +164,7 @@
 .chip-meters {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -211,7 +215,7 @@
   display: block;
   width: 76px;
   height: 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--meter-track);
   overflow: hidden;
 }
@@ -232,8 +236,12 @@
   background: var(--ramp-cool);
 }
 
+/* --text-2xs is the floor the type scale declares, and this caption used to sit
+   below it at 8.5px. It costs no width: the middle grid column is sized by the
+   76px track above it, and the longest caption this renders still measures
+   under that at 10px. */
 .meter-caption {
-  font-size: 8.5px;
+  font-size: var(--text-2xs);
   line-height: 10px;
   letter-spacing: 0.03em;
   color: var(--text-faint);
@@ -286,9 +294,6 @@
   place-items: center;
   color: var(--text-dim);
   flex: none;
-  transition:
-    background-color var(--dur) var(--ease),
-    color var(--dur) var(--ease);
 }
 .icon-btn:hover {
   background: var(--layer-hover);
@@ -327,10 +332,14 @@
   animation: card-in var(--dur) var(--ease);
 }
 
+/* The card arrives from under the pill it belongs to. No scale: the card is
+   not growing out of anything, and a transform on this element is what forced
+   the auto-sizer off `getBoundingClientRect()` in the first place — see the
+   note in FloatingBar's useAutoSize. */
 @keyframes card-in {
   from {
     opacity: 0;
-    transform: translateY(-8px) scale(0.985);
+    transform: translateY(-8px);
   }
   to {
     opacity: 1;
@@ -352,16 +361,17 @@
   letter-spacing: var(--track-tight);
 }
 
+/* Provenance, not a reading. This was cyan for a session and orange for a
+   pasted key — two hues spent on a fact that never changes and never needs
+   acting on, in an app whose whole premise is that colour means a meter moved.
+   It says which it is in words, set as a quiet tracked-out tag. */
 .card-auth {
-  font-size: var(--text-base);
+  font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--text-faint);
   white-space: nowrap;
-}
-.card-auth[data-kind="oauth"] {
-  color: var(--auth-oauth);
-}
-.card-auth[data-kind="api"] {
-  color: var(--auth-api);
 }
 
 /* A dotted rule rather than a solid one: it belongs to the same family of lit
@@ -369,7 +379,7 @@
    design. */
 .card-rule {
   height: 2px;
-  border-radius: 2px;
+  border-radius: var(--radius-pill);
   background-image: radial-gradient(circle, var(--text-faint) 45%, transparent 46%);
   background-size: 5px 2px;
   background-repeat: repeat-x;
@@ -407,6 +417,31 @@
   height: 14px;
 }
 
+/* The graduation, printed on the face below the track rather than etched over
+   it. An overlay would have to read against both the ramp at full strength and
+   the empty track, which takes a blend mode to survive either — and blend modes
+   are the one thing WebView2 and WebKit do not agree about.
+ *
+ * Ticks at 0, 25, 50, 75 and 100. Quarters are what a glance can actually use;
+ * finer graduation would be precision this instrument was never asked for, and
+ * the numeral above already carries the exact figure. */
+.meter-scale {
+  display: block;
+  height: 3px;
+  margin-top: var(--space-1);
+  /* Repeats every quarter of the track's width, with the tick at the start of
+     each period: 0, 25, 50, 75. Percentages here are of the gradient line,
+     which is the element, so the scale follows the track at any width. */
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--text-faint) 0 1px,
+    transparent 1px 25%
+  );
+  /* The 100% tick starts one pixel past the right edge and is dropped, so that
+     end of the scale is drawn against the edge instead. */
+  box-shadow: inset -1px 0 0 var(--text-faint);
+}
+
 .meter-block-caption {
   margin-top: var(--space-2);
   font-size: var(--text-xs);
@@ -442,7 +477,7 @@
   justify-content: space-between;
   gap: var(--space-3);
   font-size: var(--text-xs);
-  padding: 5px 0;
+  padding: var(--space-1) 0;
   border-bottom: 1px solid var(--hairline);
 }
 
@@ -478,7 +513,7 @@
 /* ================================ popover ================================= */
 
 .popover-root {
-  padding: 8px;
+  padding: var(--space-2);
   height: 100vh;
   box-sizing: border-box;
   overflow: hidden;
@@ -554,7 +589,7 @@
 
 .settings-root {
   height: 100vh;
-  padding: 8px;
+  padding: var(--space-2);
   box-sizing: border-box;
   overflow: hidden;
   border-radius: var(--radius-card);
@@ -614,7 +649,7 @@
 .settings-body::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.28);
   border: 3px solid transparent;
-  border-radius: 99px;
+  border-radius: var(--radius-pill);
   background-clip: padding-box;
 }
 
@@ -698,15 +733,9 @@ input::placeholder {
   border-radius: var(--radius-sm);
   background: var(--layer);
   border: 1px solid var(--hairline);
-  transition:
-    background-color var(--dur) var(--ease),
-    transform var(--dur-fast) var(--ease);
 }
 .btn:hover {
   background: var(--layer-hover);
-}
-.btn:active {
-  transform: scale(0.97);
 }
 .btn[data-tone="danger"] {
   color: var(--danger);
@@ -715,7 +744,7 @@ input::placeholder {
 /* Armed and waiting for a keystroke. The outline is the whole signal that this
    button has taken over the keyboard, so it stays regardless of focus ring. */
 .btn[data-capturing] {
-  outline: 2px solid var(--accent, var(--warn));
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
@@ -728,16 +757,20 @@ input::placeholder {
   position: relative;
   width: 38px;
   height: 22px;
-  border-radius: 11px;
+  border-radius: var(--radius-pill);
   background: var(--track);
   flex: none;
   transition: background-color var(--dur) var(--ease);
 }
+/* The one place the accent appears on this surface: a control the user turned
+   on. It was green, which read as a status light — a claim that something is
+   healthy rather than that a setting is engaged. */
 .switch[aria-checked="true"] {
-  background: var(--ok);
+  background: var(--accent);
 }
 /* Every switch on macOS is the user's chosen accent colour, and they can change
-   it. Green here would read as a status light rather than as "on". */
+   it. This is the same class of platform carve-out as the focus ring and the
+   close button's side, not a second accent of the app's own. */
 :root[data-os="macos"] .switch[aria-checked="true"] {
   background: AccentColor;
 }
@@ -772,12 +805,11 @@ input::placeholder {
 .segmented button {
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
-  padding: 4px var(--space-3);
-  border-radius: 7px;
+  padding: var(--space-1) var(--space-3);
+  /* The track's own radius less its 2px padding: the only value at which the
+     selected segment's corner runs parallel to the track's. */
+  border-radius: calc(var(--radius-sm) - 2px);
   color: var(--text-dim);
-  transition:
-    background-color var(--dur) var(--ease),
-    color var(--dur) var(--ease);
 }
 .segmented button[aria-pressed="true"] {
   background: rgba(255, 255, 255, 0.16);
@@ -831,14 +863,14 @@ input::placeholder {
   gap: 2px;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  border: 1px solid color-mix(in srgb, var(--auth-oauth) 34%, transparent);
-  background: color-mix(in srgb, var(--auth-oauth) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   font-size: var(--text-xs);
   color: var(--text-dim);
 }
 
 .oauth-status strong {
-  color: var(--auth-oauth);
+  color: var(--accent);
   font-size: var(--text-xs);
 }
 
@@ -859,7 +891,7 @@ input::placeholder {
   letter-spacing: 0.03em;
   text-transform: uppercase;
   padding: 3px 7px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: var(--layer);
   color: var(--text-dim);
   white-space: nowrap;
@@ -870,9 +902,8 @@ input::placeholder {
 .badge[data-tone="warn"] {
   color: var(--warn);
 }
-.badge[data-tone="ok"] {
-  color: var(--ok);
-}
+/* `ok` deliberately has no rule. It inherits --text-dim like every other badge,
+   because a provider reporting normally is the case that needs no signal. */
 
 .empty {
   display: flex;

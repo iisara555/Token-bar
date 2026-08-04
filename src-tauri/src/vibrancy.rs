@@ -12,6 +12,15 @@ use tauri::{Runtime, WebviewWindow};
 
 use crate::config::GlassPref;
 
+/// The corner radius AppKit rounds the vibrancy material to.
+///
+/// Must equal `--radius-card` in `src/styles/tokens.css`. AppKit rounds the
+/// material itself and cannot read CSS, so if the two disagree the material is
+/// curved differently from the surface drawn on top of it and a bright crescent
+/// shows in each corner. The two have to be changed together.
+#[cfg(target_os = "macos")]
+const CARD_RADIUS: f64 = 16.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum GlassMode {
@@ -49,9 +58,9 @@ pub fn apply<R: Runtime>(window: &WebviewWindow<R>, pref: GlassPref, dark: bool)
     //
     // DWM composites Mica and Acrylic *underneath* the webview, filling the
     // window's whole content rect. It has no idea the web content draws a
-    // 28px-rounded card, so the material stays a hard rectangle behind it and
-    // shows through at all four corners as a black square. CSS cannot reach
-    // that layer — `clip-path` on the document only ever clips what the webview
+    // rounded card, so the material stays a hard rectangle behind it and shows
+    // through at all four corners as a black square. CSS cannot reach that
+    // layer — `clip-path` on the document only ever clips what the webview
     // itself paints — and DWM's own corner rounding is a fixed ~8px that would
     // still leave the difference visible.
     //
@@ -76,16 +85,12 @@ pub fn apply<R: Runtime>(window: &WebviewWindow<R>, pref: GlassPref, dark: bool)
         // exactly this — small utility panels floating over arbitrary content.
         // `Popover` is the lighter of the two and is what the system's own
         // menu-bar extras use, so it is what a Mac user's eye expects here.
-        //
-        // The radius has to match `--radius-card`, or AppKit rounds the
-        // material to a different curve than CSS rounds the surface and leaves
-        // a bright crescent in each corner.
         let material = if dark {
             NSVisualEffectMaterial::HudWindow
         } else {
             NSVisualEffectMaterial::Popover
         };
-        if window_vibrancy::apply_vibrancy(window, material, None, Some(16.0)).is_ok() {
+        if window_vibrancy::apply_vibrancy(window, material, None, Some(CARD_RADIUS)).is_ok() {
             return GlassMode::Vibrancy;
         }
     }

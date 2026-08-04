@@ -44,16 +44,27 @@
 :root {
   color-scheme: dark;
 
+  /* One ladder, and every radius in the app is on it. A surface is either a
+     pill (the bar, every meter track), a bezel around a window (--radius-card),
+     a control (--radius-chip), a field (--radius-sm), or something nested
+     inside a field (--radius-xs). Anything that needed a value between two
+     rungs was a control that had not decided which of the two it was.
+
+     --radius-card is duplicated in `src-tauri/src/vibrancy.rs` as CARD_RADIUS,
+     because AppKit rounds the vibrancy material itself and cannot read CSS. The
+     two have to move together. */
   --radius-pill: 999px;
-  --radius-card: 28px;
-  --radius-chip: 12px;
-  --radius-sm: 10px;
+  --radius-card: 16px;
+  --radius-chip: 10px;
+  --radius-sm: 6px;
+  --radius-xs: 3px;
 
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
+  --space-6: 32px;
 
   /* One easing curve everywhere: a fast start that settles, never a bounce. */
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
@@ -68,7 +79,6 @@
   --text-sm: 12px;
   --text-base: 13px;
   --text-md: 15px;
-  --text-lg: 18px;
   --text-xl: 22px;
   --text-2xl: 30px;
 
@@ -78,7 +88,6 @@
   --weight-bold: 700;
 
   --track-tight: -0.02em;
-  --track-snug: -0.01em;
   --track-caps: 0.06em;
 
   /* system-ui resolves to SF Pro on macOS and Segoe UI Variable on Windows 11
@@ -105,16 +114,18 @@
   --glass-fill: rgba(0, 0, 0, 0.94);
   --glass-fill-strong: rgba(0, 0, 0, 0.985);
   --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-ring: rgba(255, 255, 255, 0.07);
-  --glass-sheen: rgba(255, 255, 255, 0.045);
 
   --layer: rgba(255, 255, 255, 0.055);
   --layer-hover: rgba(255, 255, 255, 0.1);
   --hairline: rgba(255, 255, 255, 0.12);
 
+  /* Separation, not drama. The shadow's whole job is to say that this surface
+     is in front of the desktop rather than painted onto it; past that it is
+     weather. The old 44px spread was carrying a light source the design does
+     not otherwise claim to have. */
   --shadow:
-    0 18px 44px rgba(0, 0, 0, 0.66),
-    0 2px 8px rgba(0, 0, 0, 0.5);
+    0 8px 24px rgba(0, 0, 0, 0.55),
+    0 1px 3px rgba(0, 0, 0, 0.5);
   --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.45);
 
   --track: rgba(255, 255, 255, 0.17);
@@ -148,13 +159,21 @@
 
   --meter-track: rgba(255, 255, 255, 0.18);
 
-  /* Auth provenance. Cyan for a session the user already signed into, orange
-     for a key they pasted in — two different trust stories, worth telling
-     apart at a glance in the card header. */
-  --auth-oauth: #3fd8e8;
-  --auth-api: #ff6a2a;
+  /* One accent, and it is the tail dot on the app icon — the mark's only
+     colour, so the two agree by construction.
 
-  --ok: #35d18a;
+     It marks exactly one thing: a control the user has switched on, or armed.
+     Not status, which the meters and the alarm colours already carry, and not
+     categories — auth provenance used to be cyan-versus-orange here, which
+     spent two hues on a fact that is metadata rather than a reading. It says
+     OAUTH or API in words now.
+
+     There is deliberately no "ok" colour. Absence of alarm is the ok signal;
+     lighting something green to say nothing is wrong is one more claim on an
+     eye that should be free to land on the one meter that changed. */
+  --accent: #ff6a2a;
+
+  /* Alarm. These two are function: a reading that has left its normal range. */
   --warn: #ffb020;
   --danger: #ff5c4d;
 }
@@ -165,7 +184,6 @@
 :root[data-glass="solid"] {
   --glass-fill: #000000;
   --glass-fill-strong: #0a0a0a;
-  --glass-sheen: transparent;
 }
 
 /* When the compositor already blurs behind the window — DWM on Windows, AppKit
@@ -249,17 +267,19 @@ button {
 
 /* --------------------------------- glass ---------------------------------- */
 
+/* One border, all the way round, and nothing on top of it. The surface used to
+   also carry an `inset 0 1px 0` top highlight and a `::before` gradient over
+   its upper third — both of them lighting from a source this design never
+   claims. What is left is the bezel and the shadow, which are the two things
+   that say where the surface begins and that it is in front. */
 .glass {
   position: relative;
-  isolation: isolate;
   background: var(--glass-fill);
   backdrop-filter: blur(var(--blur)) saturate(var(--sat));
   -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat));
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-card);
-  box-shadow:
-    var(--shadow),
-    inset 0 1px 0 var(--glass-ring);
+  box-shadow: var(--shadow);
 }
 
 /* Clip the WebView2 backdrop-filter compositor tile to the rounded surface;
@@ -272,17 +292,6 @@ button {
    backdrop-filtered element correctly on its own. */
 :root[data-os="windows"] .glass {
   clip-path: inset(0 round var(--radius-card));
-}
-
-/* Specular sheen: light falls on the top third of a glass slab, not evenly. */
-.glass::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(180deg, var(--glass-sheen) 0%, transparent 46%);
-  z-index: -1;
 }
 
 .glass--pill {
@@ -298,12 +307,34 @@ button {
 
 /* ------------------------------ interaction ------------------------------- */
 
-.pressable {
+/* Every control in the app presses the same way.
+ *
+ * The chip, the buttons and the rows each used to restate this by hand, and had
+ * drifted apart doing so: the chip pressed to 0.985 and a button to 0.97, which
+ * is two different machines under one set of fingers. One definition now, and
+ * the component classes are named in it rather than opting in at each call
+ * site — a control should not be able to ship without its press. `.pressable`
+ * stays for anything that is none of these.
+ *
+ * Each control's own rule keeps only what is genuinely its own: colour, size
+ * and shape. */
+.pressable,
+.chip,
+.btn,
+.icon-btn,
+.popover-row,
+.segmented button {
   transition:
     transform var(--dur-fast) var(--ease),
-    background-color var(--dur) var(--ease);
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
 }
-.pressable:active {
+.pressable:active,
+.chip:active,
+.btn:active,
+.icon-btn:active,
+.popover-row:active,
+.segmented button:active {
   transform: scale(0.97);
 }
 

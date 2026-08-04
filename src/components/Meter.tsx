@@ -11,6 +11,10 @@
  * The gradient is scaled to the fill rather than painted across the track, so a
  * meter at 40% still ends in its ramp's full-strength colour. That makes a
  * short meter look like a short meter, not like a faded one.
+ *
+ * At card size the track gets a printed quarter graduation beneath it. At chip
+ * size it does not: across 76px the ticks would be texture rather than a scale,
+ * and the reading sits right beside the bar there anyway.
  */
 
 export type Ramp = "warm" | "cool";
@@ -75,6 +79,10 @@ export function MeterBlock({
         </span>
       </div>
       <Track percent={percent} ramp={ramp} description={description} large />
+      {/* Quarter graduation, printed under the track the way a dial's scale is
+          printed on the face. Decoration to a screen reader — the numeral above
+          and the meter's own aria-valuetext already say where the needle is. */}
+      <span className="meter-scale" aria-hidden />
       {caption && <div className="meter-block-caption">{caption}</div>}
     </div>
   );

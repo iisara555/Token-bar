@@ -28,7 +28,17 @@ ends in its ramp's full-strength colour: short, not faded.
 
 Every meter shows what is **left**, so they all drain in the same direction. A
 bar that filled up as things got worse would be the only one in the app running
-backwards.
+backwards. At card size a meter also carries a printed quarter graduation below
+its track — quarters, because that is the resolution a glance can use and the
+numeral above already gives the exact figure.
+
+Outside the meters there is **one accent**, `#ff6a2a`, which is the tail dot on
+the app icon. It marks a control that is switched on or armed for a keystroke,
+and nothing else — not status, and not categories. `--warn` and `--danger` are
+kept for a reading that has left its normal range. There is deliberately no "ok"
+colour: a provider reporting normally is the case that needs no signal, and
+lighting it green would be one more claim on an eye that should be free to land
+on the single meter that moved.
 
 **Numerals** are set in [Bitcount Prop Single][bitcount], a dot-matrix face that
 turns each reading into a small array of lit cells. It is subsetted to latin and
